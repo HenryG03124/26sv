@@ -1,0 +1,10 @@
+# Runtime / inference
+mss
+numpy
+opencv-python
+torch
+
+# Dataset preparation, training, and visualization
+matplotlib
+pandas
+Pillow

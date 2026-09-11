@@ -1,0 +1,15 @@
+{
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File (External CMD)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "externalTerminal",
+            "cwd": "${fileDirname}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ]
+}

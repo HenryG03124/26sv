@@ -13,8 +13,8 @@ from torch.utils.data import Dataset
 
 
 # PIL resize receives (width, height), while tensor shapes use (height, width).
-TARGET_HEIGHT = 256
-TARGET_WIDTH = 448
+TARGET_HEIGHT = 352
+TARGET_WIDTH = 640
 TARGET_PIL_SIZE = (TARGET_WIDTH, TARGET_HEIGHT)
 
 @dataclass(frozen=True)
@@ -30,8 +30,8 @@ class BDDLaneDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
     """Read image/mask pairs listed in a generated CSV file.
 
     Returned values:
-      image: float32 tensor, shape (3, 256, 448), values in [0, 1]
-      mask:  int64/long tensor, shape (256, 448), values in {0, 1, 255}
+      image: float32 tensor, shape (3, 352, 640), values in [0, 1]
+      mask:  int64/long tensor, shape (352, 640), values in {0, 1, 255}
 
     Class 0 is background and class 1 is a BDD100K lane marking. The same
     image/mask loading logic is also used for background/road/car masks.

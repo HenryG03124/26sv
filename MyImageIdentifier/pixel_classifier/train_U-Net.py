@@ -15,7 +15,7 @@ val_dataset = BDDVehicleRoadDataset(DATASETS_DIR / "processed_pc_ds/val_pairs.cs
 train_loader = tud.DataLoader(train_dataset , batch_size = 64 , shuffle = True)
 val_loader = tud.DataLoader(val_dataset , batch_size = 64 , shuffle = False)
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 class EncoderBlock(nn.Module):
     def __init__(self , in_channels , out_channels , stride):

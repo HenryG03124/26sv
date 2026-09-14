@@ -27,7 +27,7 @@ road_val_loader = tud.DataLoader(road_val_dataset , batch_size = batch_size , sh
 lane_train_loader = tud.DataLoader(lane_train_dataset , batch_size = batch_size , shuffle = True)
 lane_val_loader = tud.DataLoader(lane_val_dataset , batch_size = batch_size , shuffle = False)
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 class EncoderBlock(nn.Module):
     def __init__(self , in_channels , out_channels , stride):

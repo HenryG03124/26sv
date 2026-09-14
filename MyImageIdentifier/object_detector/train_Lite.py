@@ -20,7 +20,7 @@ train_dataset = tud.Subset(full_train_dataset , train_indices)
 train_loader = tud.DataLoader(train_dataset , batch_size = 64 , shuffle = True , collate_fn = detection_collate_fn)
 val_loader = tud.DataLoader(val_dataset , batch_size = 64 , shuffle = False , collate_fn = detection_collate_fn)
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 class BasicBlock(nn.Module):
     def __init__(self , in_channels , out_channels , stride):

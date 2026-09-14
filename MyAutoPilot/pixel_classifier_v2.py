@@ -3,7 +3,7 @@ import cv2
 import torch
 import torch.nn as nn
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 INPUT_HEIGHT = 352
 INPUT_WIDTH = 640

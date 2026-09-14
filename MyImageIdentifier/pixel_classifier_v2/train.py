@@ -16,15 +16,16 @@ road_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds/val_pairs.csv"
 full_lane_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_v2_ds/train_pairs.csv")
 lane_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_v2_ds/val_pairs.csv")
 
-lane_train_sample_size = min(10000 , len(full_lane_train_dataset))
+lane_train_sample_size = min(15000 , len(full_lane_train_dataset))
 lane_sample_generator = torch.Generator().manual_seed(42)
 lane_train_indices = torch.randperm(len(full_lane_train_dataset) , generator = lane_sample_generator)[ : lane_train_sample_size].tolist()
 lane_train_dataset = tud.Subset(full_lane_train_dataset , lane_train_indices)
 
-road_train_loader = tud.DataLoader(road_train_dataset , batch_size = 32 , shuffle = True)
-road_val_loader = tud.DataLoader(road_val_dataset , batch_size = 32 , shuffle = False)
-lane_train_loader = tud.DataLoader(lane_train_dataset , batch_size = 32 , shuffle = True)
-lane_val_loader = tud.DataLoader(lane_val_dataset , batch_size = 32 , shuffle = False)
+batch_size = 16
+road_train_loader = tud.DataLoader(road_train_dataset , batch_size = batch_size , shuffle = True)
+road_val_loader = tud.DataLoader(road_val_dataset , batch_size = batch_size , shuffle = False)
+lane_train_loader = tud.DataLoader(lane_train_dataset , batch_size = batch_size , shuffle = True)
+lane_val_loader = tud.DataLoader(lane_val_dataset , batch_size = batch_size , shuffle = False)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -179,18 +180,45 @@ class UNet(nn.Module):
             lane_feature = torch.cat((lane_semantic , lane_detail) , dim = 1) #640 * 352 ch = 24
             return self.lane_head(lane_feature) #640 * 352 ch = 2
 
+class LaneLoss(nn.Module):
+    def __init__(self , class_weights , ce_weight , dice_weight):
+        super().__init__()
+
+        self.ce = nn.CrossEntropyLoss(weight = class_weights , ignore_index = 255)
+        self.ce_weight = ce_weight
+        self.dice_weight = dice_weight
+        self.smooth = 1.0 #avoid zero division
+
+    def forward(self , outputs , masks):
+        ce_loss = self.ce(outputs , masks)
+
+        lane_probability = torch.softmax(outputs , dim = 1)[: , 1]
+        valid = masks != 255
+
+        lane_probability = lane_probability[valid]
+        lane_target = (masks[valid] == 1).to(torch.float32)
+
+        intersection = (lane_probability * lane_target).sum() #keep only when target = 1 (soft intersection)
+
+        dice_score = (2.0 * intersection + self.smooth) / (lane_probability.sum() + lane_target.sum() + self.smooth)
+        dice_loss = 1 - dice_score
+
+        lane_loss = self.ce_weight * ce_loss + self.dice_weight * dice_loss
+        
+        return lane_loss
+
 model = UNet().to(device)
 
 road_criterion = nn.CrossEntropyLoss(
     weight = torch.tensor([1.0 , 1.5 , 3.0] , dtype = torch.float32 , device = device) ,
     ignore_index = 255
 )
-lane_criterion = nn.CrossEntropyLoss(
-    weight = torch.tensor([1.0 , 5.0] , dtype = torch.float32 , device = device) ,
-    ignore_index = 255
+lane_criterion = LaneLoss(
+    class_weights = torch.tensor([1.0 , 5.0] , dtype = torch.float32 , device = device) , 
+    ce_weight = 1.0 , dice_weight = 0.5
 )
 optimizer = torch.optim.Adam(model.parameters() , lr = 0.001)
-lane_prob_threshold = 0.65
+lane_prob_threshold = 0.7
 
 print("current device:" , device)
 print("road/car training samples:" , len(road_train_dataset))

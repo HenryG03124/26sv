@@ -4,7 +4,7 @@ import numpy as np
 from screen_capture import ScreenCapture
 from pixel_classifier import PixelClassifier
 from object_detector import ObjectDetector
-from road_center import RoadCenter
+from road_center_A import RoadCenterA
 
 pc_colors = np.array([[0 , 0 , 0] , [0 , 255 , 0] , [0 , 0 , 255]] , dtype = np.uint8)
 od_colors = ((255 , 64 , 64) , (64 , 128 , 255))

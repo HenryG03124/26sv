@@ -169,7 +169,7 @@ image_array = np.array(image , dtype = np.uint8 , copy = True)
 image_tensor = torch.from_numpy(image_array).permute(2 , 0 , 1).float().div(255.0)
 image_tensor = image_tensor.unsqueeze(0).to(device)
 
-lane_prob_threshold = 0.65
+lane_prob_threshold = 0.7
 
 with torch.no_grad():
     features = model(image_tensor)

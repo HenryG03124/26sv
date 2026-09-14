@@ -12,6 +12,7 @@ class ScreenCapture:
         frame = np.array(screenshot) #[h , w , ch = 4(BGRA)]ndarray
         frame = cv2.cvtColor(frame , cv2.COLOR_BGRA2BGR) #[h , w , ch = 3(BGR)]ndarray
         return frame
+    
     def native_resolution(self):
         return self.capture_area["width"] , self.capture_area["height"]
 

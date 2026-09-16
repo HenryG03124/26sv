@@ -1,0 +1,70 @@
+import numpy as np
+import cv2
+
+max_gap_far = 12 #px
+max_gap_near = 12 #px
+
+class LaneRefiner():
+    def sample_lane_points(mask , y_far , y_near , sgl_lane_px_offset , sample_interval , lane_x_diff):
+        width = mask.shape[1]
+        center_x = width // 2
+        llane_sample_points = []
+        rlane_sample_points = []
+        prev_llane_x_center = -2 * lane_x_diff
+        prev_rlane_x_center = -2 * lane_x_diff
+
+        for y in range(y_near , y_far - 1 , -sample_interval):
+            lane_x_indices = np.where(mask[y] == 3)[0]
+
+            if len(lane_x_indices) == 0:
+                continue
+
+            llane_x_indices = lane_x_indices[lane_x_indices < center_x]
+            rlane_x_indices = lane_x_indices[lane_x_indices >= center_x]
+
+            if len(llane_x_indices) > 0:
+                llane_x_edge = llane_x_indices[-1]
+                current_llane_x_indices = llane_x_indices[llane_x_indices >= llane_x_edge - sgl_lane_px_offset]
+                llane_x_center = np.mean(current_llane_x_indices)
+                if len(llane_sample_points) == 0 or abs(llane_x_center - prev_llane_x_center) <= lane_x_diff:
+                    llane_sample_points.append([llane_x_center , y])
+                    prev_llane_x_center = llane_x_center
+
+            if len(rlane_x_indices) > 0:
+                rlane_x_edge = rlane_x_indices[0]
+                current_rlane_x_indices = rlane_x_indices[rlane_x_indices <= rlane_x_edge + sgl_lane_px_offset]
+                rlane_x_center = np.mean(current_rlane_x_indices)
+                if len(rlane_sample_points) == 0 or abs(rlane_x_center - prev_rlane_x_center) <= lane_x_diff:
+                    rlane_sample_points.append([rlane_x_center , y])
+                    prev_rlane_x_center = rlane_x_center
+
+        return llane_sample_points , rlane_sample_points
+
+    def fit_lane_points(sample_points , height , width , y_far , y_near , degree):
+        if len(sample_points) < degree + 1:
+            return []
+
+        x_values = np.array([point[0] for point in sample_points] , dtype = np.float64)
+        y_values = np.array([point[1] for point in sample_points] , dtype = np.float64)
+        weights = 1 - (y_values / height) ** 2
+
+        if min(y_values) - y_far > max_gap_far or y_near - max(y_values) > max_gap_near:
+            return []
+
+        coefficients = np.polyfit(y_values , x_values , degree , w = weights)
+        predicted_y_values = np.arange(y_far , y_near + 1)
+        predicted_x_values = np.polyval(coefficients , predicted_y_values)
+        predicted_x_values = np.rint(predicted_x_values).astype(np.int32)
+        predicted_x_values = np.clip(predicted_x_values , 0 , width - 1)
+
+        lane_points = [[int(x) , int(y)] for x , y in zip(predicted_x_values , predicted_y_values)]
+        return lane_points
+
+    def refine(mask , y_far , y_near , degree , sgl_lane_px_offset , lane_x_diff):
+        height , width = mask.shape
+        llane_sample_points , rlane_sample_points = LaneRefiner.sample_lane_points(mask , y_far , y_near , sgl_lane_px_offset , 4 , lane_x_diff)
+
+        llane_points = LaneRefiner.fit_lane_points(llane_sample_points , height , width , y_far , y_near , degree)
+        rlane_points = LaneRefiner.fit_lane_points(rlane_sample_points , height , width , y_far , y_near , degree)
+
+        return llane_points , rlane_points

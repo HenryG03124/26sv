@@ -2,40 +2,60 @@ import cv2
 import numpy as np
 
 from screen_capture import ScreenCapture
-from pixel_classifier import PixelClassifier
+from draw import Draw
+from pixel_classifier_v2 import PixelClassifierV2
 from object_detector import ObjectDetector
-from road_center_A import RoadCenterA
+from lane_refiner import LaneRefiner
+from road_center import RoadCenter
+from steering import Steering
+from input_controller import InputController
 
-pc_colors = np.array([[0 , 0 , 0] , [0 , 255 , 0] , [0 , 0 , 255]] , dtype = np.uint8)
+pc_colors = np.array([[0 , 0 , 0] , [0 , 255 , 0] , [0 , 0 , 255] , [0 , 255 , 255]] , dtype = np.uint8)
 od_colors = ((255 , 64 , 64) , (64 , 128 , 255))
 class_names = ("pedestrian" , "car")
+
 alpha = 0.3
 car_mask_ratio_threshold = 0.6
+lane_prob_threshold = 0.7
+center_offset_threshold = 10 #px
+sgl_lane_px_offset = 10 #px
+degree = 2
+lane_x_diff = 20 #px
+
+y_far = 188 #px
+y_near = 300 #px
+K_steering = 3
+
 monitor_index = 2
 obj_detect = "enable"
-
-def draw_boxes(detector , frame , mask , car_mask_ratio_threshold):
-    pos , boxes , scores , labels = detector.predict(frame)
-    boxes , scores , labels = detector.box_filter(pos , boxes , scores , labels , 448 , 256 , mask , car_mask_ratio_threshold)
-    for box, score, label in zip(boxes , scores , labels):
-        x1, y1, x2, y2 = map(int , box)
-        cv2.rectangle(frame , (x1 , y1) , (x2 , y2) , color = od_colors[label] , thickness = 1 , lineType = cv2.LINE_AA)
-        cv2.putText(frame , text = class_names[label] + f" {score:.2f}" , org = (x1 , max(y1 - 5, 0)) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = 0.3 , color = od_colors[label] , thickness = 1 , lineType = cv2.LINE_AA)
+road_center = "enable"
+road_center_mode = "lr"
+calculate_steering = "enable"
+control = "enable"
 
 def main():
+    steering = 0
+    steering_prev = 0
+    invalid_count = 0
+    steering_diff = 0
+
     capturer = ScreenCapture(monitor_index)
 
-    classifier = PixelClassifier()
-    classifier.load_model("pc_model_U-Net.pth")
+    classifier = PixelClassifierV2()
+    classifier.load_model("pc_model_v2.pth")
 
     detector = ObjectDetector()
     detector.load_model("od_model_Lite.pth")
+
+    road_center_detector = RoadCenter
+
+    input_controller = InputController()
 
     try:
         while True:
             frame = capturer.capture_frame()
 
-            mask = classifier.predict(frame)
+            mask = classifier.predict(frame , lane_prob_threshold)
 
             display_frame = cv2.resize(frame , (mask.shape[1] , mask.shape[0]) , interpolation = cv2.INTER_LINEAR)
             active = mask != 0
@@ -44,7 +64,38 @@ def main():
             display_frame[active] = blended[active]
 
             if obj_detect == "enable":
-                draw_boxes(detector , display_frame , mask , car_mask_ratio_threshold)
+                Draw.draw_boxes(detector , display_frame , mask , car_mask_ratio_threshold , class_names , od_colors)
+
+            if road_center == "enable" and road_center_mode == "lr":
+                llane_sample_points , rlane_sample_points = LaneRefiner.sample_lane_points(mask , y_far , y_near , sgl_lane_px_offset , 4 , lane_x_diff)
+                Draw.draw_lane_points(display_frame , llane_sample_points , rlane_sample_points)
+                left_points , right_points = LaneRefiner.refine(mask , y_far , y_near , degree , sgl_lane_px_offset , lane_x_diff)
+                Draw.draw_lane_lines(display_frame , left_points , right_points)
+                center_points = road_center_detector.detect_from_lr(mask , left_points , right_points)
+                center_points = road_center_detector.center_points_filter(center_points , center_offset_threshold)
+                Draw.draw_road_center(display_frame , center_points , y_far , y_near)
+            elif road_center == "enable" and road_center_mode == "mask":
+                center_points = road_center_detector.detect_from_mask(mask , y_far , y_near)
+                center_points = road_center_detector.center_points_filter(center_points , center_offset_threshold)
+                Draw.draw_road_center(display_frame , center_points , y_far , y_near)
+
+            if calculate_steering == "enable" and road_center == "enable":
+                if Steering.existence_filter(center_points, y_far, y_near):
+                    invalid_count = 0
+                    steering = Steering.steering(center_points , y_far , K_steering , steering_prev)
+                    steering_diff = steering / 5 
+                else:
+                    if invalid_count < 5:
+                        steering -= steering_diff
+                        invalid_count += 1
+                    else:
+                        steering = 0
+
+                print(steering)
+                steering_prev = steering
+
+            if control == "enable" and calculate_steering == "enable" and road_center == "enable":
+                input_controller.steering_controller(steering)
 
             width , height = capturer.native_resolution()
             display_frame = cv2.resize(display_frame , (width // 2 , height // 2) , interpolation = cv2.INTER_LINEAR)
@@ -53,6 +104,7 @@ def main():
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
+
     finally:
         capturer.close()
         cv2.destroyAllWindows()

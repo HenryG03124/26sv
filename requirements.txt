@@ -3,6 +3,7 @@ mss
 numpy
 opencv-python
 torch
+vgamepad
 
 # Dataset preparation, training, and visualization
 matplotlib

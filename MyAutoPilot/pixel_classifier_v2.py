@@ -119,6 +119,20 @@ class UNet(nn.Module):
         self.lane_detail = nn.Sequential(
             nn.Conv2d(3 , 8 , kernel_size = 3 , padding = 1 , bias = False) ,
             nn.BatchNorm2d(8) ,
+            nn.ReLU(inplace = True) ,
+
+            nn.Conv2d(8 , 16 , kernel_size = 1 , bias = False) ,
+            nn.BatchNorm2d(16) ,
+            nn.ReLU(inplace = True) ,
+
+            #insert dilation in kernel
+            #grouped conv
+            nn.Conv2d(16 , 16 , kernel_size = 3 , padding = 2 , dilation = 2 , groups = 16 , bias = False) ,
+            nn.BatchNorm2d(16) ,
+            nn.ReLU(inplace = True) ,
+
+            nn.Conv2d(16 , 8 , kernel_size = 1 , bias = False) ,
+            nn.BatchNorm2d(8) ,
             nn.ReLU(inplace = True)
         )
 
@@ -148,7 +162,7 @@ class UNet(nn.Module):
         decoder1 = self.up1(decoder2) #320 * 176 ch = 32
         decoder1 = torch.cat((decoder1 , root) , dim = 1) #320 * 176 ch = 96
         decoder1 = self.decoder1(decoder1) #320 * 176 ch = 32
-
+    
         return decoder1
 
     def head(self , x , decoder1 , task):
@@ -159,7 +173,7 @@ class UNet(nn.Module):
             lane_detail = self.lane_detail(x) #640 * 352 ch = 8 unprocessed
             lane_feature = torch.cat((lane_semantic , lane_detail) , dim = 1) #640 * 352 ch = 24
             return self.lane_head(lane_feature) #640 * 352 ch = 2
-
+        
 class PixelClassifierV2():
     def __init__(self):
         self.model = UNet().to(device)

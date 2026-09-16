@@ -115,6 +115,20 @@ class UNet(nn.Module):
         self.lane_detail = nn.Sequential(
             nn.Conv2d(3 , 8 , kernel_size = 3 , padding = 1 , bias = False) ,
             nn.BatchNorm2d(8) ,
+            nn.ReLU(inplace = True) ,
+
+            nn.Conv2d(8 , 16 , kernel_size = 1 , bias = False) ,
+            nn.BatchNorm2d(16) ,
+            nn.ReLU(inplace = True) ,
+
+            #insert dilation in kernel
+            #grouped conv
+            nn.Conv2d(16 , 16 , kernel_size = 3 , padding = 2 , dilation = 2 , groups = 16 , bias = False) ,
+            nn.BatchNorm2d(16) ,
+            nn.ReLU(inplace = True) ,
+
+            nn.Conv2d(16 , 8 , kernel_size = 1 , bias = False) ,
+            nn.BatchNorm2d(8) ,
             nn.ReLU(inplace = True)
         )
 

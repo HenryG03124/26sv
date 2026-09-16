@@ -16,7 +16,7 @@ road_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds/val_pairs.csv"
 full_lane_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_v2_ds/train_pairs.csv")
 lane_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_v2_ds/val_pairs.csv")
 
-lane_train_sample_size = min(15000 , len(full_lane_train_dataset))
+lane_train_sample_size = min(30000 , len(full_lane_train_dataset))
 lane_sample_generator = torch.Generator().manual_seed(42)
 lane_train_indices = torch.randperm(len(full_lane_train_dataset) , generator = lane_sample_generator)[ : lane_train_sample_size].tolist()
 lane_train_dataset = tud.Subset(full_lane_train_dataset , lane_train_indices)
@@ -138,6 +138,20 @@ class UNet(nn.Module):
 
         self.lane_detail = nn.Sequential(
             nn.Conv2d(3 , 8 , kernel_size = 3 , padding = 1 , bias = False) ,
+            nn.BatchNorm2d(8) ,
+            nn.ReLU(inplace = True) ,
+
+            nn.Conv2d(8 , 16 , kernel_size = 1 , bias = False) ,
+            nn.BatchNorm2d(16) ,
+            nn.ReLU(inplace = True) ,
+
+            #insert dilation in kernel
+            #grouped conv
+            nn.Conv2d(16 , 16 , kernel_size = 3 , padding = 2 , dilation = 2 , groups = 16 , bias = False) ,
+            nn.BatchNorm2d(16) ,
+            nn.ReLU(inplace = True) ,
+
+            nn.Conv2d(16 , 8 , kernel_size = 1 , bias = False) ,
             nn.BatchNorm2d(8) ,
             nn.ReLU(inplace = True)
         )
@@ -295,7 +309,7 @@ def evaluate_task(loader , task , criterion , classes):
 loss_set = []
 miou_set = []
 
-for epoch in range(25):
+for epoch in range(30):
     try:
         road_loss , road_IoU , road_mIoU = train_task(road_train_loader , "road" , road_criterion , 3)
         lane_loss , lane_IoU , lane_mIoU = train_task(lane_train_loader , "lane" , lane_criterion , 2)

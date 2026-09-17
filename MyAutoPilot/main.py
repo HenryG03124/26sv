@@ -4,7 +4,7 @@ import numpy as np
 from screen_capture import ScreenCapture
 from draw import Draw
 from pixel_classifier_v2 import PixelClassifierV2
-from object_detector import ObjectDetector
+from object_detector import ObjectDetectorLite
 from lane_refiner import LaneRefiner
 from road_center import RoadCenter
 from steering import Steering
@@ -12,7 +12,6 @@ from input_controller import InputController
 
 pc_colors = np.array([[0 , 0 , 0] , [0 , 255 , 0] , [0 , 0 , 255] , [0 , 255 , 255]] , dtype = np.uint8)
 od_colors = ((255 , 64 , 64) , (64 , 128 , 255))
-class_names = ("pedestrian" , "car")
 
 alpha = 0.3
 car_mask_ratio_threshold = 0.6
@@ -22,8 +21,8 @@ sgl_lane_px_offset = 10 #px
 degree = 2
 lane_x_diff = 20 #px
 
-y_far = 188 #px
-y_near = 300 #px
+y_far = 220 #px
+y_near = 320 #px
 K_steering = 3
 
 monitor_index = 2
@@ -44,7 +43,7 @@ def main():
     classifier = PixelClassifierV2()
     classifier.load_model("pc_model_v2.pth")
 
-    detector = ObjectDetector()
+    detector = ObjectDetectorLite()
     detector.load_model("od_model_Lite.pth")
 
     road_center_detector = RoadCenter
@@ -57,6 +56,10 @@ def main():
 
             mask = classifier.predict(frame , lane_prob_threshold)
 
+            if obj_detect == "enable":
+                pos , boxes , scores = detector.predict(frame)
+                boxes , scores = detector.box_filter(pos , boxes , scores , mask.shape[1] , mask.shape[0] , mask , car_mask_ratio_threshold)
+
             display_frame = cv2.resize(frame , (mask.shape[1] , mask.shape[0]) , interpolation = cv2.INTER_LINEAR)
             active = mask != 0
             color_mask = pc_colors[mask]
@@ -64,7 +67,7 @@ def main():
             display_frame[active] = blended[active]
 
             if obj_detect == "enable":
-                Draw.draw_boxes(detector , display_frame , mask , car_mask_ratio_threshold , class_names , od_colors)
+                Draw.draw_boxes(detector , display_frame , boxes , scores , od_colors)
 
             if road_center == "enable" and road_center_mode == "lr":
                 llane_sample_points , rlane_sample_points = LaneRefiner.sample_lane_points(mask , y_far , y_near , sgl_lane_px_offset , 4 , lane_x_diff)
@@ -108,6 +111,7 @@ def main():
     finally:
         capturer.close()
         cv2.destroyAllWindows()
+        input_controller.close()
 
 if __name__ == "__main__":
     main()

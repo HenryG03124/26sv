@@ -87,7 +87,7 @@ class RoadCenter():
             return center_points
 
         prev = center_points[0]
-        for i in range(len(center_points) - 1):
+        for i in range(len(center_points)):
             if center_points[i][0] - prev[0] > center_offset_threshold or prev[0] - center_points[i][0] > center_offset_threshold:
                 center_points[i][0] = (prev[0] + center_points[i + 1][0]) // 2
             prev = center_points[i]

@@ -5,6 +5,16 @@ max_gap_far = 12 #px
 max_gap_near = 12 #px
 
 class LaneRefiner():
+    def calculate_slope(points):
+        slope = 0
+        if len(points) == 0 or len(points) == 1:
+            return slope
+        for i in range(len(points) - 1):
+            slope += (points[i + 1][0] - points[i][0]) / (points[i + 1][1] - points[i][1])
+        
+        slope /= (len(points) - 1)
+        return slope
+
     def sample_lane_points(mask , y_far , y_near , sgl_lane_px_offset , sample_interval , lane_x_diff):
         width = mask.shape[1]
         center_x = width // 2
@@ -12,9 +22,15 @@ class LaneRefiner():
         rlane_sample_points = []
         prev_llane_x_center = -2 * lane_x_diff
         prev_rlane_x_center = -2 * lane_x_diff
+        prev_llane_y = 0
+        prev_rlane_y = 0
 
         for y in range(y_near , y_far - 1 , -sample_interval):
             lane_x_indices = np.where(mask[y] == 3)[0]
+            llane_slope = LaneRefiner.calculate_slope(llane_sample_points[-4 : ])
+            rlane_slope = LaneRefiner.calculate_slope(rlane_sample_points[-4 : ])
+            llane_existance = False
+            rlane_existance = False
 
             if len(lane_x_indices) == 0:
                 continue
@@ -26,17 +42,24 @@ class LaneRefiner():
                 llane_x_edge = llane_x_indices[-1]
                 current_llane_x_indices = llane_x_indices[llane_x_indices >= llane_x_edge - sgl_lane_px_offset]
                 llane_x_center = np.mean(current_llane_x_indices)
-                if len(llane_sample_points) == 0 or abs(llane_x_center - prev_llane_x_center) <= lane_x_diff:
+                if len(llane_sample_points) == 0 or abs(llane_x_center - (prev_llane_x_center + llane_slope * (y - prev_llane_y))) <= lane_x_diff:
                     llane_sample_points.append([llane_x_center , y])
                     prev_llane_x_center = llane_x_center
+                    prev_llane_y = y
+                    llane_existance = True
 
             if len(rlane_x_indices) > 0:
                 rlane_x_edge = rlane_x_indices[0]
                 current_rlane_x_indices = rlane_x_indices[rlane_x_indices <= rlane_x_edge + sgl_lane_px_offset]
                 rlane_x_center = np.mean(current_rlane_x_indices)
-                if len(rlane_sample_points) == 0 or abs(rlane_x_center - prev_rlane_x_center) <= lane_x_diff:
+                if len(rlane_sample_points) == 0 or abs(rlane_x_center - (prev_rlane_x_center + rlane_slope * (y - prev_rlane_y))) <= lane_x_diff:
                     rlane_sample_points.append([rlane_x_center , y])
                     prev_rlane_x_center = rlane_x_center
+                    prev_rlane_y = y
+                    rlane_existance = True
+
+            if llane_existance and rlane_existance:
+                center_x = (llane_x_center + rlane_x_center) // 2
 
         return llane_sample_points , rlane_sample_points
 

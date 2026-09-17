@@ -12,3 +12,6 @@ class InputController:
         self.gamepad.update()
 
         time.sleep(0.01)
+
+    def close(self):
+        self.gamepad.reset()

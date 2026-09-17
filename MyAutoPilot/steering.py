@@ -22,18 +22,56 @@ max_offset_rate_steering = 0.07
 max_preview_steering = 0.015
 steering_rate = 0.25 #joystick units / second
 return_rate = 0.5 #joystick units / second
-offset_rate_tau = 0.2 #seconds
+offset_rate_window = 0.35 #seconds
+offset_rate_min_span = 0.15 #seconds
+offset_rate_tau = 0.1 #seconds , the window already smooths the trend
 reset_interval = 0.5 #seconds
 
 class Steering():
     _prev_time = None
     _prev_offset = None
     _offset_rate = 0.0
+    _offset_history = []
 
     def reset():
         Steering._prev_time = None
         Steering._prev_offset = None
         Steering._offset_rate = 0.0
+        Steering._offset_history = []
+
+    def _calculate_offset_rate(offset , current_time , elapsed):
+        Steering._offset_history.append((current_time , offset))
+        # Keep one point just before the window for low frame rates.
+        cutoff_time = current_time - offset_rate_window
+        while len(Steering._offset_history) > 2 and Steering._offset_history[1][0] <= cutoff_time:
+            Steering._offset_history.pop(0)
+        points = Steering._offset_history
+        span = points[-1][0] - points[0][0]
+        offset_rate = 0.0
+        if len(points) >= 3 and span >= offset_rate_min_span:
+            # Long-baseline pairs suppress frame-to-frame pixel jitter.
+            slopes = []
+            for i in range(len(points) - 1):
+                for j in range(i + 1 , len(points)):
+                    time_diff = points[j][0] - points[i][0]
+                    if time_diff >= span / 2:
+                        slopes.append((points[j][1] - points[i][1]) / time_diff)
+            offset_rate = float(np.median(slopes))
+            # Ignore roughly two pixels of net movement across the window.
+            offset_rate = math.copysign(max(abs(offset_rate) - offset_deadband / span , 0) , offset_rate)
+            offset_rate = np.clip(offset_rate , -1 , 1)
+        rate_weight = 1 - math.exp(-elapsed / offset_rate_tau)
+        Steering._offset_rate += rate_weight * (offset_rate - Steering._offset_rate)
+        return Steering._offset_rate
+
+    def _calculate_rate_steering(offset , offset_steering , gain):
+        rate_steering = gain * offset_rate_gain * Steering._offset_rate
+        priority_weight = min(abs(offset) / offset_priority , 1)
+        priority_weight = priority_weight ** 2 * (3 - 2 * priority_weight)
+        # Gradually restrict countersteering; no switch at the 24px boundary.
+        correction_limit = min(max_offset_rate_steering , 0.7 * abs(offset_steering))
+        rate_limit = (1 - priority_weight) * max_offset_rate_steering + priority_weight * correction_limit
+        return float(np.clip(rate_steering , -rate_limit , rate_limit))
 
     def _validate_points(center_points):
         try:
@@ -116,22 +154,15 @@ class Steering():
             if abs(offset_diff) > 0.12 + 0.5 * dt:
                 Steering._prev_offset = offset
                 Steering._offset_rate = 0.0
+                Steering._offset_history = [(current_time , offset)]
                 return Steering._limit_steering(0 , steering_prev , dt)
-            offset_rate = np.clip(offset_diff / max(elapsed , 0.001) , -1 , 1)
-            rate_weight = 1 - math.exp(-elapsed / offset_rate_tau)
-            Steering._offset_rate += rate_weight * (offset_rate - Steering._offset_rate)
+        Steering._calculate_offset_rate(offset , current_time , elapsed)
         Steering._prev_offset = offset
 
         gain = min(K_steering / 3 , 2)
         offset_error = math.copysign(max(abs(offset) - offset_deadband , 0) , offset)
         offset_steering = gain * offset_gain * offset_error
-        rate_steering = np.clip(gain * offset_rate_gain * Steering._offset_rate ,
-                               -max_offset_rate_steering , max_offset_rate_steering)
-
-        # Away from center, trend feedback can brake correction but not reverse it.
-        if abs(offset) >= offset_priority:
-            rate_limit = 0.7 * abs(offset_steering)
-            rate_steering = np.clip(rate_steering , -rate_limit , rate_limit)
+        rate_steering = Steering._calculate_rate_steering(offset , offset_steering , gain)
         preview_weight = max(0 , 1 - abs(offset) / offset_priority)
         preview_steering = preview_weight * np.clip(gain * preview_gain * offset_far ,
                                                    -max_preview_steering , max_preview_steering)

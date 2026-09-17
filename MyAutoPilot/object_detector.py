@@ -8,7 +8,7 @@ device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is
 
 grid_height = 16
 grid_width = 28
-confidence_threshold = 0.5
+confidence_threshold = 0.65
 nms_threshold = 0.35
 car_mask_class_id = 2
 car_label_id = 1
@@ -18,8 +18,6 @@ class ObjectDetectorLite():
 
     def __init__(self):
         self.model = ResNet().to(device)
-        self.labels = None
-        self.filtered_labels = torch.empty(0 , dtype = torch.int64)
 
     def load_model(self , model_path):
         self.model.load_state_dict(torch.load(model_path , map_location = device , weights_only = True))
@@ -32,8 +30,6 @@ class ObjectDetectorLite():
         return model_input
 
     def predict(self , frame):
-        self.labels = None
-        self.filtered_labels = torch.empty(0 , dtype = torch.int64)
         model_input = self.preprocess(frame)
 
         with torch.no_grad():
@@ -43,18 +39,18 @@ class ObjectDetectorLite():
             obj = torch.sigmoid(output[4])
             probabilities = torch.softmax(output[5 : ] , dim = 0)
 
-            class_scores , self.labels = probabilities.max(dim = 0)
+            class_scores , labels = probabilities.max(dim = 0)
             scores = obj * class_scores
             selected = scores >= confidence_threshold
             positions = selected.nonzero(as_tuple = False)
 
-        return positions , box_output , scores
+        return positions , box_output , scores , labels
 
-    def non_maximum_suppression(self , boxes , scores , threshold):
+    def non_maximum_suppression(self , boxes , scores , labels , threshold):
         kept = []
 
-        for class_id in self.filtered_labels.unique():
-            indices = (self.filtered_labels == class_id).nonzero(as_tuple = False).squeeze(1)
+        for class_id in labels.unique():
+            indices = (labels == class_id).nonzero(as_tuple = False).squeeze(1)
             order = indices[torch.argsort(scores[indices] , descending = True)]
 
             while len(order) > 0:
@@ -80,14 +76,7 @@ class ObjectDetectorLite():
         boxes_area = (boxes[: , 2] - boxes[: , 0]) * (boxes[: , 3] - boxes[: , 1])
         return intersection / (box_area + boxes_area - intersection).clamp(min = 1e-7)
 
-    def box_filter(self , positions , box_output , scores , original_width , original_height , mask , car_mask_ratio_threshold):
-        if not 0.0 <= car_mask_ratio_threshold <= 1.0:
-            raise ValueError("car_mask_ratio_threshold must be between 0.0 and 1.0")
-        if mask.ndim != 2:
-            raise ValueError("mask must be a 2D array")
-        if self.labels is None:
-            raise RuntimeError("predict must be called before box_filter")
-
+    def box_filter(self , positions , box_output , scores , labels , original_width , original_height , mask , car_mask_ratio_threshold):
         boxes = []
         selected_scores = []
         selected_labels = []
@@ -97,7 +86,7 @@ class ObjectDetectorLite():
         for position in positions:
             y = position[0].item()
             x = position[1].item()
-            label = self.labels[y , x].item()
+            label = labels[y , x].item()
 
             offset_x = torch.sigmoid(box_output[0 , y , x]).item()
             offset_y = torch.sigmoid(box_output[1 , y , x]).item()
@@ -110,36 +99,36 @@ class ObjectDetectorLite():
             box_width = width_in_cells / grid_width * original_width
             box_height = height_in_cells / grid_height * original_height
 
-            first_x = max(0.0 , center_x - box_width / 2)
-            first_y = max(0.0 , center_y - box_height / 2)
+            x1 = max(0.0 , center_x - box_width / 2)
+            y1 = max(0.0 , center_y - box_height / 2)
 
-            second_x = min(float(original_width) , center_x + box_width / 2)
-            second_y = min(float(original_height) , center_y + box_height / 2)
+            x2 = min(float(original_width) , center_x + box_width / 2)
+            y2 = min(float(original_height) , center_y + box_height / 2)
 
-            mask_first_x = max(0 , min(mask_width , int(first_x / original_width * mask_width)))
-            mask_first_y = max(0 , min(mask_height , int(first_y / original_height * mask_height)))
-            mask_second_x = max(0 , min(mask_width , int(second_x / original_width * mask_width)))
-            mask_second_y = max(0 , min(mask_height , int(second_y / original_height * mask_height)))
-            box_mask = mask[mask_first_y : mask_second_y , mask_first_x : mask_second_x]
+            mask_x1 = max(0 , min(mask_width , int(x1 / original_width * mask_width)))
+            mask_y1 = max(0 , min(mask_height , int(y1 / original_height * mask_height)))
+            mask_x2 = max(0 , min(mask_width , int(x2 / original_width * mask_width)))
+            mask_y2 = max(0 , min(mask_height , int(y2 / original_height * mask_height)))
+            box_mask = mask[mask_y1 : mask_y2 , mask_x1 : mask_x2]
 
-            if second_x <= first_x or second_y <= first_y:
+            if x2 <= x1 or y2 <= y1:
                 continue
             if label == car_label_id:
                 if box_mask.size == 0 or np.count_nonzero(box_mask == car_mask_class_id) / box_mask.size < car_mask_ratio_threshold:
                     continue
 
-            boxes.append([first_x , first_y , second_x , second_y])
+            boxes.append([x1 , y1 , x2 , y2])
 
             selected_scores.append(scores[y , x].item())
             selected_labels.append(label)
 
         boxes = torch.tensor(boxes , dtype = torch.float32).reshape(-1 , 4)
         selected_scores = torch.tensor(selected_scores , dtype = torch.float32)
-        self.filtered_labels = torch.tensor(selected_labels , dtype = torch.int64)
+        filtered_labels = torch.tensor(selected_labels , dtype = torch.int64)
         if len(boxes) > 0:
-            kept = self.non_maximum_suppression(boxes , selected_scores , nms_threshold)
+            kept = self.non_maximum_suppression(boxes , selected_scores , filtered_labels , nms_threshold)
             boxes = boxes[kept]
             selected_scores = selected_scores[kept]
-            self.filtered_labels = self.filtered_labels[kept]
+            filtered_labels = filtered_labels[kept]
 
-        return boxes , selected_scores
+        return boxes , selected_scores , filtered_labels

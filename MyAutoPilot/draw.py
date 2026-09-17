@@ -2,11 +2,16 @@ import numpy as np
 import cv2
 
 class Draw():
-    def draw_boxes(detector , frame , boxes , scores , od_colors):
-        for box, score, label in zip(boxes , scores , detector.filtered_labels):
-            x1, y1, x2, y2 = map(int , box)
+    def draw_boxes(detector , frame , trackings , od_colors):
+        for track_id , tracking in trackings.items():
+            if tracking["status"] != "tracked":
+                continue
+            x1, y1, x2, y2 = map(int , tracking["box"])
+            label = tracking["label"]
+            score = tracking["score"]
+            direction = tracking["direction"]
             cv2.rectangle(frame , (x1 , y1) , (x2 , y2) , color = od_colors[label] , thickness = 1 , lineType = cv2.LINE_AA)
-            cv2.putText(frame , text = detector.class_names[label] + f" {score:.2f}" , org = (x1 , max(y1 - 5 , 0)) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = 0.3 , color = od_colors[label] , thickness = 1 , lineType = cv2.LINE_AA)
+            cv2.putText(frame , text = detector.class_names[label] + f" {score:.2f} ID:{track_id} {direction}" , org = (x1 , max(y1 - 5 , 0)) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = 0.3 , color = od_colors[label] , thickness = 1 , lineType = cv2.LINE_AA)
 
     def draw_road_center(frame , center_points , y_far , y_near):
         if len(center_points) < 3:

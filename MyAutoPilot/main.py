@@ -1,10 +1,12 @@
 import cv2
 import numpy as np
+import time
 
 from screen_capture import ScreenCapture
 from draw import Draw
 from pixel_classifier_v2 import PixelClassifierV2
 from object_detector import ObjectDetectorLite
+from mov_detector import MovDetector
 from lane_refiner import LaneRefiner
 from road_center import RoadCenter
 from steering import Steering
@@ -16,12 +18,15 @@ od_colors = ((255 , 64 , 64) , (64 , 128 , 255))
 alpha = 0.3
 car_mask_ratio_threshold = 0.6
 lane_prob_threshold = 0.7
+
 center_offset_threshold = 10 #px
 sgl_lane_px_offset = 10 #px
 degree = 2
 lane_x_diff = 10 #px
 
-y_far = 220 #px
+spd = 50 #px / s
+
+y_far = 216 #px
 y_near = 320 #px
 K_steering = 3
 
@@ -43,6 +48,7 @@ def main():
 
     detector = ObjectDetectorLite()
     detector.load_model("od_model_Lite.pth")
+    mov_detector = MovDetector()
 
     road_center_detector = RoadCenter
 
@@ -51,11 +57,13 @@ def main():
     try:
         while True:
             frame = capturer.capture_frame()
+            timestamp = time.monotonic()
 
             mask = classifier.predict(frame , lane_prob_threshold)
 
-            pos , boxes , scores = detector.predict(frame)
-            boxes , scores = detector.box_filter(pos , boxes , scores , mask.shape[1] , mask.shape[0] , mask , car_mask_ratio_threshold)
+            pos , boxes , scores , labels = detector.predict(frame)
+            boxes , scores , labels = detector.box_filter(pos , boxes , scores , labels , mask.shape[1] , mask.shape[0] , mask , car_mask_ratio_threshold)
+            trackings = mov_detector.update(boxes , scores , labels , timestamp , spd)
 
             llane_sample_points , rlane_sample_points = LaneRefiner.sample_lane_points(mask , y_far , y_near , sgl_lane_px_offset , 4 , lane_x_diff)
             left_points , right_points = LaneRefiner.refine(mask , y_far , y_near , degree , sgl_lane_px_offset , lane_x_diff)
@@ -72,7 +80,7 @@ def main():
             blended = cv2.addWeighted(display_frame , 1 - alpha , color_mask , alpha , 0)
             display_frame[active] = blended[active]
 
-            Draw.draw_boxes(detector , display_frame , boxes , scores , od_colors)
+            Draw.draw_boxes(detector , display_frame , trackings , od_colors)
 
             if road_center_mode == "lr":
                 Draw.draw_lane_points(display_frame , llane_sample_points , rlane_sample_points)

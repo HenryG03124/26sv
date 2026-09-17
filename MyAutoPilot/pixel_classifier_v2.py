@@ -38,3 +38,4 @@ class PixelClassifierV2():
             mask = mask.cpu().numpy().astype(np.uint8)
 
         return mask #h * w 2d
+        #0: bg 1: road 2: car 3: lane

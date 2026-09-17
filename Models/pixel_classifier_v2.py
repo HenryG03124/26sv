@@ -166,4 +166,4 @@ class UNet(nn.Module):
             lane_semantic = self.lane_up(decoder1) #640 * 352 ch = 16 processed
             lane_detail = self.lane_detail(x) #640 * 352 ch = 8 unprocessed
             lane_feature = torch.cat((lane_semantic , lane_detail) , dim = 1) #640 * 352 ch = 24
-            return self.lane_head(lane_feature)
+            return self.lane_head(lane_feature) #640 *352 ch = 2

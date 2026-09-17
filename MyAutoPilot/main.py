@@ -19,15 +19,13 @@ lane_prob_threshold = 0.7
 center_offset_threshold = 10 #px
 sgl_lane_px_offset = 10 #px
 degree = 2
-lane_x_diff = 20 #px
+lane_x_diff = 10 #px
 
 y_far = 220 #px
 y_near = 320 #px
 K_steering = 3
 
 monitor_index = 2
-obj_detect = "enable"
-road_center = "enable"
 road_center_mode = "lr"
 calculate_steering = "enable"
 control = "enable"
@@ -56,33 +54,41 @@ def main():
 
             mask = classifier.predict(frame , lane_prob_threshold)
 
-            if obj_detect == "enable":
-                pos , boxes , scores = detector.predict(frame)
-                boxes , scores = detector.box_filter(pos , boxes , scores , mask.shape[1] , mask.shape[0] , mask , car_mask_ratio_threshold)
+            pos , boxes , scores = detector.predict(frame)
+            boxes , scores = detector.box_filter(pos , boxes , scores , mask.shape[1] , mask.shape[0] , mask , car_mask_ratio_threshold)
+
+            llane_sample_points , rlane_sample_points = LaneRefiner.sample_lane_points(mask , y_far , y_near , sgl_lane_px_offset , 4 , lane_x_diff)
+            left_points , right_points = LaneRefiner.refine(mask , y_far , y_near , degree , sgl_lane_px_offset , lane_x_diff)
+
+            current_lane_mask = np.zeros_like(mask , dtype = np.uint8)
+
+            if len(left_points) >= 3 and len(right_points) >= 3:
+                polygon = np.array(left_points + right_points[ : : -1] ,dtype = np.int32)
+                cv2.fillPoly(current_lane_mask , [polygon] , color = 1)
 
             display_frame = cv2.resize(frame , (mask.shape[1] , mask.shape[0]) , interpolation = cv2.INTER_LINEAR)
-            active = mask != 0
+            active = ((mask == 1) & (current_lane_mask > 0)) | (mask == 2) | (mask == 3)
             color_mask = pc_colors[mask]
             blended = cv2.addWeighted(display_frame , 1 - alpha , color_mask , alpha , 0)
             display_frame[active] = blended[active]
 
-            if obj_detect == "enable":
-                Draw.draw_boxes(detector , display_frame , boxes , scores , od_colors)
+            Draw.draw_boxes(detector , display_frame , boxes , scores , od_colors)
 
-            if road_center == "enable" and road_center_mode == "lr":
-                llane_sample_points , rlane_sample_points = LaneRefiner.sample_lane_points(mask , y_far , y_near , sgl_lane_px_offset , 4 , lane_x_diff)
+            if road_center_mode == "lr":
                 Draw.draw_lane_points(display_frame , llane_sample_points , rlane_sample_points)
-                left_points , right_points = LaneRefiner.refine(mask , y_far , y_near , degree , sgl_lane_px_offset , lane_x_diff)
+
                 Draw.draw_lane_lines(display_frame , left_points , right_points)
+
                 center_points = road_center_detector.detect_from_lr(mask , left_points , right_points)
                 center_points = road_center_detector.center_points_filter(center_points , center_offset_threshold)
                 Draw.draw_road_center(display_frame , center_points , y_far , y_near)
-            elif road_center == "enable" and road_center_mode == "mask":
+
+            elif road_center_mode == "mask":
                 center_points = road_center_detector.detect_from_mask(mask , y_far , y_near)
                 center_points = road_center_detector.center_points_filter(center_points , center_offset_threshold)
                 Draw.draw_road_center(display_frame , center_points , y_far , y_near)
 
-            if calculate_steering == "enable" and road_center == "enable":
+            if calculate_steering == "enable":
                 if Steering.existence_filter(center_points, y_far, y_near):
                     invalid_count = 0
                     steering = Steering.steering(center_points , y_far , K_steering , steering_prev)
@@ -97,7 +103,8 @@ def main():
                 print(steering)
                 steering_prev = steering
 
-            if control == "enable" and calculate_steering == "enable" and road_center == "enable":
+            if control == "enable" and calculate_steering == "enable":
+
                 input_controller.steering_controller(steering)
 
             width , height = capturer.native_resolution()

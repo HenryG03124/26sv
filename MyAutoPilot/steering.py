@@ -35,6 +35,9 @@ class Steering():
 
     def reset():
         Steering._prev_time = None
+        Steering._reset_tracking()
+
+    def _reset_tracking():
         Steering._prev_offset = None
         Steering._offset_rate = 0.0
         Steering._offset_history = []
@@ -130,16 +133,17 @@ class Steering():
 
         points = Steering._validate_points(center_points)
         if points is None or not np.isfinite(K_steering) or K_steering <= 0:
-            Steering.reset()
+            # Discard path history without losing the output rate-limit clock.
+            Steering._reset_tracking()
             return Steering._limit_steering(0 , steering_prev , dt)
         points = points[points[: , 1] >= y_far]
         if len(points) < 2 or y_far not in points[: , 1]:
-            Steering.reset()
+            Steering._reset_tracking()
             return Steering._limit_steering(0 , steering_prev , dt)
 
         y_near = np.max(points[: , 1])
         if not 0 <= y_far < y_near < reference_y:
-            Steering.reset()
+            Steering._reset_tracking()
             return Steering._limit_steering(0 , steering_prev , dt)
 
         # A short band avoids making the controller depend on one endpoint pixel.

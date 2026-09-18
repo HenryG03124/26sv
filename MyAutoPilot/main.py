@@ -16,7 +16,7 @@ pc_colors = np.array([[0 , 0 , 0] , [0 , 255 , 0] , [0 , 0 , 255] , [0 , 255 , 2
 od_colors = ((255 , 64 , 64) , (64 , 128 , 255))
 
 alpha = 0.3
-car_mask_ratio_threshold = 0.6
+car_mask_ratio_threshold = 0.5
 lane_prob_threshold = 0.7
 
 center_offset_threshold = 10 #px
@@ -24,13 +24,13 @@ sgl_lane_px_offset = 10 #px
 degree = 2
 lane_x_diff = 10 #px
 
-spd = 50 #px / s
+spd = 70 #px / s
 
-y_far = 216 #px
-y_near = 320 #px
+y_far = 188 #px
+y_near = 292 #px
 K_steering = 3
 
-monitor_index = 2
+monitor_index = 1
 road_center_mode = "lr"
 calculate_steering = "enable"
 control = "enable"

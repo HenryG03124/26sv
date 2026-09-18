@@ -1,8 +1,8 @@
 import numpy as np
 import cv2
 
-max_gap_far = 12 #px
-max_gap_near = 12 #px
+max_gap_far = 24 #px
+max_gap_near = 24 #px
 
 class LaneRefiner():
     def calculate_slope(points):
@@ -15,11 +15,45 @@ class LaneRefiner():
         slope /= (len(points) - 1)
         return slope
 
+    def initialize_sampling(points , min_support_rows = 4 , init_x_diff = 4 , min_y_diff = 12):
+        if len(points) < min_support_rows:
+            return []
+
+        points = np.asarray(points , dtype = np.float64)
+        x_values = points[: , 0]
+        y_values = points[: , 1]
+
+        best_indices = []
+        best_score = (-1 , -1 , -np.inf) #support rows , max(y) - min(y) , avg error
+
+        for i in range(len(points) - 1):
+            for j in range(i + 1 , len(points)):
+                if abs(y_values[j] - y_values[i]) < min_y_diff:
+                    continue
+
+                slope = LaneRefiner.calculate_slope([points[i] , points[j]])
+                pred_x = x_values[i] + slope * (y_values - y_values[i])
+                errors = np.abs(x_values - pred_x)
+                indices = np.flatnonzero(errors <= init_x_diff)
+
+                score = (len(indices) , np.ptp(y_values[indices]) , -np.mean(errors[indices]))
+
+                if score > best_score:
+                    best_score = score
+                    best_indices = indices
+
+        if len(best_indices) < min_support_rows:
+            return []
+
+        return points[best_indices].tolist()
+
     def sample_lane_points(mask , y_far , y_near , sgl_lane_px_offset , sample_interval , lane_x_diff):
         width = mask.shape[1]
         center_x = width // 2
         llane_sample_points = []
         rlane_sample_points = []
+        llane_sample_points_init = []
+        rlane_sample_points_init = []
         prev_llane_x_center = -2 * lane_x_diff
         prev_rlane_x_center = -2 * lane_x_diff
         prev_llane_y = 0
@@ -42,7 +76,15 @@ class LaneRefiner():
                 llane_x_edge = llane_x_indices[-1]
                 current_llane_x_indices = llane_x_indices[llane_x_indices >= llane_x_edge - sgl_lane_px_offset]
                 llane_x_center = np.mean(current_llane_x_indices)
-                if len(llane_sample_points) == 0 or abs(llane_x_center - (prev_llane_x_center + llane_slope * (y - prev_llane_y))) <= lane_x_diff:
+                if len(llane_sample_points) == 0:
+                    llane_sample_points_init.append([llane_x_center , y])
+                    llane_sample_points_init = [point for point in llane_sample_points_init if point[1] - y <= 48][-8 : ] #create sliding windows (len = 8)
+                    llane_sample_points = LaneRefiner.initialize_sampling(llane_sample_points_init)
+                    if llane_sample_points:
+                        prev_llane_x_center , prev_llane_y = llane_sample_points[-1]
+                        llane_existance = True
+
+                elif abs(llane_x_center - (prev_llane_x_center + llane_slope * (y - prev_llane_y))) <= lane_x_diff:
                     llane_sample_points.append([llane_x_center , y])
                     prev_llane_x_center = llane_x_center
                     prev_llane_y = y
@@ -52,7 +94,15 @@ class LaneRefiner():
                 rlane_x_edge = rlane_x_indices[0]
                 current_rlane_x_indices = rlane_x_indices[rlane_x_indices <= rlane_x_edge + sgl_lane_px_offset]
                 rlane_x_center = np.mean(current_rlane_x_indices)
-                if len(rlane_sample_points) == 0 or abs(rlane_x_center - (prev_rlane_x_center + rlane_slope * (y - prev_rlane_y))) <= lane_x_diff:
+                if len(rlane_sample_points) == 0:
+                    rlane_sample_points_init.append([rlane_x_center , y])
+                    rlane_sample_points_init = [point for point in rlane_sample_points_init if point[1] - y <= 48][-8 : ] #create sliding windows (len = 8)
+                    rlane_sample_points = LaneRefiner.initialize_sampling(rlane_sample_points_init)
+                    if rlane_sample_points:
+                        prev_rlane_x_center , prev_rlane_y = rlane_sample_points[-1]
+                        rlane_existance = True
+
+                elif abs(rlane_x_center - (prev_rlane_x_center + rlane_slope * (y - prev_rlane_y))) <= lane_x_diff:
                     rlane_sample_points.append([rlane_x_center , y])
                     prev_rlane_x_center = rlane_x_center
                     prev_rlane_y = y

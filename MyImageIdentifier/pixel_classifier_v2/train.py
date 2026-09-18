@@ -81,7 +81,7 @@ def train_task(loader , task , criterion , classes):
     inter = torch.zeros(classes , dtype = torch.float64 , device = device)
     union = torch.zeros(classes , dtype = torch.float64 , device = device)
 
-    for images , masks in loader:
+    for batch_index , (images , masks) in enumerate(loader):
         images , masks = images.to(device) , masks.to(device)
         optimizer.zero_grad()
         features = model(images)
@@ -104,9 +104,13 @@ def train_task(loader , task , criterion , classes):
             inter[class_id] += (predc & truec).sum()
             union[class_id] += (predc | truec).sum()
 
+        if batch_index == 0 or (batch_index + 1) % 100 == 0:
+            print(task , "batch:" , batch_index + 1 , "/" , len(loader) , "loss:" , loss.item() , flush = True)
+        yield #Let the other task update the shared network between batches.
+
     IoU = torch.where(union > 0 , inter / union , torch.tensor(float("nan") , device = device)
 )
-    return total_loss / len(loader.dataset) , IoU , torch.nanmean(IoU)
+    yield total_loss / len(loader.dataset) , IoU , torch.nanmean(IoU)
 
 def evaluate_task(loader , task , criterion , classes):
     model.eval()
@@ -148,8 +152,21 @@ miou_set = []
 
 for epoch in range(30):
     try:
-        road_loss , road_IoU , road_mIoU = train_task(road_train_loader , "road" , road_criterion , 3)
-        lane_loss , lane_IoU , lane_mIoU = train_task(lane_train_loader , "lane" , lane_criterion , 2)
+        print("\nepoch:" , epoch + 1 , "training" , flush = True)
+        road_training = train_task(road_train_loader , "road" , road_criterion , 3)
+        lane_training = train_task(lane_train_loader , "lane" , lane_criterion , 2)
+        road_steps = lane_steps = 0
+        road_batches , lane_batches = len(road_train_loader) , len(lane_train_loader)
+        # Interleave by progress: visit every batch once without a single-task tail.
+        while road_steps < road_batches or lane_steps < lane_batches:
+            if lane_steps == lane_batches or (road_steps < road_batches and road_steps / road_batches <= lane_steps / lane_batches):
+                next(road_training)
+                road_steps += 1
+            else:
+                next(lane_training)
+                lane_steps += 1
+        road_loss , road_IoU , road_mIoU = next(road_training)
+        lane_loss , lane_IoU , lane_mIoU = next(lane_training)
         avg_loss = (road_loss + lane_loss) / 2
         train_mIoU = torch.nanmean(torch.stack((road_mIoU , lane_mIoU)))
         loss_set.append(avg_loss)
@@ -162,6 +179,7 @@ for epoch in range(30):
         print("train lane-head background IoU:" , lane_IoU[0].item())
         print("train lane IoU:" , lane_IoU[1].item())
         print("train mIoU:" , train_mIoU.item())
+        torch.save(model.state_dict() , "pc_model_v2.pth")
     except KeyboardInterrupt:
         break
 

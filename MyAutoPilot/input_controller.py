@@ -13,5 +13,11 @@ class InputController:
 
         time.sleep(0.01)
 
+    def brake_controller(self , brake):
+        brake = max(0.0 , min(1.0 , brake))
+        self.gamepad.left_trigger_float(value_float = brake)
+        self.gamepad.update()
+
     def close(self):
         self.gamepad.reset()
+        self.gamepad.update()

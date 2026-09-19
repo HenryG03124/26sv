@@ -6,22 +6,17 @@ import torch.nn as nn
 import torch.utils.data as tud
 from pathlib import Path
 
-from Models.pixel_classifier_v2 import UNet
+from Models.pixel_classifier_v3 import UNet
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATASETS_DIR = SCRIPT_DIR.parent / "datasets"
 
-from MyImageIdentifier.pixel_classifier_v2.bdd_pc_v2_ds import BDDLaneDataset
+from MyImageIdentifier.pixel_classifier_v3.a2d2_pc_ds import A2D2Dataset
 
-road_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds/train_pairs.csv")
-road_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds/val_pairs.csv")
-full_lane_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_lane_ds/train_pairs.csv")
-lane_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_lane_ds/val_pairs.csv")
-
-lane_train_sample_size = min(30000 , len(full_lane_train_dataset))
-lane_sample_generator = torch.Generator().manual_seed(42)
-lane_train_indices = torch.randperm(len(full_lane_train_dataset) , generator = lane_sample_generator)[ : lane_train_sample_size].tolist()
-lane_train_dataset = tud.Subset(full_lane_train_dataset , lane_train_indices)
+road_train_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_A2D2_ds/train_pairs.csv" , task = "road")
+road_val_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_A2D2_ds/val_pairs.csv" , task = "road")
+lane_train_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_A2D2_ds/train_pairs.csv" , task = "lane")
+lane_val_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_A2D2_ds/val_pairs.csv" , task = "lane")
 
 batch_size = 16
 road_train_loader = tud.DataLoader(road_train_dataset , batch_size = batch_size , shuffle = True)
@@ -108,8 +103,7 @@ def train_task(loader , task , criterion , classes):
             print(task , "batch:" , batch_index + 1 , "/" , len(loader) , "loss:" , loss.item() , flush = True)
         yield #Let the other task update the shared network between batches.
 
-    IoU = torch.where(union > 0 , inter / union , torch.tensor(float("nan") , device = device)
-)
+    IoU = torch.where(union > 0 , inter / union , torch.tensor(float("nan") , device = device))
     yield total_loss / len(loader.dataset) , IoU , torch.nanmean(IoU)
 
 def evaluate_task(loader , task , criterion , classes):
@@ -179,12 +173,12 @@ for epoch in range(30):
         print("train lane-head background IoU:" , lane_IoU[0].item())
         print("train lane IoU:" , lane_IoU[1].item())
         print("train mIoU:" , train_mIoU.item())
-        torch.save(model.state_dict() , "pc_model_v2.pth")
+        torch.save(model.state_dict() , "pc_model_v3.pth")
     except KeyboardInterrupt:
         break
 
-torch.save(model.state_dict() , "pc_model_v2.pth")
-print("\nmodel saved: pc_model_v2.pth")
+torch.save(model.state_dict() , "pc_model_v3.pth")
+print("\nmodel saved: pc_model_v3.pth")
 
 road_val_loss , road_accuracy , road_IoU , road_mIoU = evaluate_task(road_val_loader , "road" , road_criterion , 3)
 lane_val_loss , lane_accuracy , lane_IoU , lane_mIoU = evaluate_task(lane_val_loader , "lane" , lane_criterion , 2)
@@ -209,7 +203,7 @@ axes[0].plot(epochs , loss_set , color = "blue" , label = "Train Loss")
 axes[0].axhline(avg_val_loss , color = "red" , linestyle = "--" , label = "Validation Loss")
 axes[0].set_xlabel("Epoch")
 axes[0].set_ylabel("Loss")
-axes[0].set_title("Pixel Classifier V2 Loss Curve")
+axes[0].set_title("Pixel Classifier V3 Loss Curve")
 axes[0].grid(True)
 axes[0].legend()
 
@@ -217,7 +211,7 @@ axes[1].plot(epochs , miou_set , color = "green" , label = "Train mIoU")
 axes[1].axhline(mIoU.item() , color = "orange" , linestyle = "--" , label = "Validation mIoU")
 axes[1].set_xlabel("Epoch")
 axes[1].set_ylabel("mIoU")
-axes[1].set_title("Pixel Classifier V2 mIoU Curve")
+axes[1].set_title("Pixel Classifier V3 mIoU Curve")
 axes[1].grid(True)
 axes[1].legend()
 

@@ -3,6 +3,7 @@ import numpy as np
 car_label_id = 1
 pedestrian_label_id = 0
 max_missing_time = 0.5 #seconds
+max_center_diff = 10 #px
 
 class MovDetector():
     def __init__(self):
@@ -57,7 +58,7 @@ class MovDetector():
             if box_index in matches:
                 track_id = matches[box_index]
                 delta_x , delta_y = centers[box_index] - self.trackings[track_id]["center"]
-                if delta_x == 0 and delta_y == 0:
+                if abs(delta_x) < max_center_diff and abs(delta_y) < max_center_diff:
                     direction = "stationary"
                 elif abs(delta_y) >= abs(delta_x):
                     direction = "forward" if delta_y < 0 else "backward"

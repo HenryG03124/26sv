@@ -525,9 +525,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--train-labels", type=Path, help="已解压的 train JSON")
     parser.add_argument("--val-labels", type=Path, help="已解压的 val JSON")
-    parser.add_argument("--raw-root", type=Path, default=DATASETS_DIR / "pc_v2_ds")
+    parser.add_argument("--raw-root", type=Path, default=DATASETS_DIR / "pc_lane_ds")
     parser.add_argument(
-        "--output-root", type=Path, default=DATASETS_DIR / "processed_pc_v2_ds"
+        "--output-root", type=Path, default=DATASETS_DIR / "processed_pc_lane_ds"
     )
     parser.add_argument("--line-width", type=int, default=8)
     args = parser.parse_args()

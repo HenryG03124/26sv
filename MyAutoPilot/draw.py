@@ -2,6 +2,15 @@ import numpy as np
 import cv2
 
 class Draw():
+    def draw_brake(frame , brake , target_id , ttc , lane_status):
+        target_text = "-" if target_id is None else str(target_id)
+        ttc_text = "-" if ttc is None else f"{ttc:.1f}s"
+        text = f"BRAKE:{brake:.2f} ID:{target_text} TTC:{ttc_text} LANE:{lane_status}"
+        color = (0 , 0 , 255) if brake > 0 else (0 , 255 , 0)
+        if brake == 0 and lane_status != "current":
+            color = (0 , 180 , 255)
+        cv2.putText(frame , text = text , org = (10 , 18) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = 0.4 , color = color , thickness = 1 , lineType = cv2.LINE_AA)
+
     def draw_boxes(detector , frame , trackings , od_colors):
         for track_id , tracking in trackings.items():
             if tracking["status"] != "tracked":

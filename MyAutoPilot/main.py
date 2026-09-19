@@ -10,6 +10,7 @@ from mov_detector import MovDetector
 from lane_refiner import LaneRefiner
 from road_center import RoadCenter
 from steering import Steering
+from auto_brakes import AutoBrakes
 from input_controller import InputController
 
 pc_colors = np.array([[0 , 0 , 0] , [0 , 255 , 0] , [0 , 0 , 255] , [0 , 255 , 255]] , dtype = np.uint8)
@@ -33,6 +34,7 @@ K_steering = 3
 monitor_index = 1
 road_center_mode = "lr"
 calculate_steering = "enable"
+calculate_brake = "enable"
 control = "enable"
 
 def main():
@@ -51,6 +53,8 @@ def main():
     mov_detector = MovDetector()
 
     road_center_detector = RoadCenter
+
+    auto_brakes = AutoBrakes()
 
     input_controller = InputController()
 
@@ -111,9 +115,15 @@ def main():
                 print(steering)
                 steering_prev = steering
 
-            if control == "enable" and calculate_steering == "enable":
+            brake = 0.0
+            if calculate_brake == "enable":
+                brake = auto_brakes.brake(left_points , right_points , trackings , timestamp , mask.shape[0] , mask.shape[1])
+                Draw.draw_brake(display_frame , brake , auto_brakes.target_id , auto_brakes.ttc , auto_brakes.lane_status)
 
-                input_controller.steering_controller(steering)
+            if control == "enable":
+                if calculate_steering == "enable":
+                    input_controller.steering_controller(steering)
+                input_controller.brake_controller(brake)
 
             width , height = capturer.native_resolution()
             display_frame = cv2.resize(display_frame , (width // 2 , height // 2) , interpolation = cv2.INTER_LINEAR)

@@ -36,6 +36,7 @@ class AutoBrakesTests(unittest.TestCase):
         self.assertGreater(value , 0)
         self.assertEqual(self.brakes.target_id , 1)
         self.assertAlmostEqual(self.brakes.ttc , 58 / 30)
+        self.assertEqual(self.brakes.reason , "ttc")
 
     def test_approach_result_is_similar_across_frame_rates(self):
         values = []
@@ -69,10 +70,13 @@ class AutoBrakesTests(unittest.TestCase):
         box = [290 , 250 , 350 , 300]
         self.assertEqual(self.step(0 , box) , 0)
         self.assertEqual(self.step(0.1 , box) , 0)
+        self.assertEqual(self.brakes.reason , "none")
         self.assertEqual(self.step(0.2 , box) , 0.4)
+        self.assertEqual(self.brakes.reason , "near")
 
     def test_emergency_car_beyond_y_near_brakes_immediately(self):
         self.assertEqual(self.step(0 , [290 , 250 , 350 , 320] , direction = "unknown") , 1)
+        self.assertEqual(self.brakes.reason , "emergency")
 
     def test_box_clipped_to_image_bottom_is_not_missed(self):
         self.assertEqual(self.step(0 , [290 , 240 , 350 , 352]) , 1)
@@ -89,7 +93,9 @@ class AutoBrakesTests(unittest.TestCase):
     def test_release_holds_through_short_detection_dropout(self):
         self.step(0 , [290 , 250 , 350 , 320])
         self.assertEqual(self.step(0.2) , 1)
+        self.assertEqual(self.brakes.reason , "hold")
         self.assertEqual(self.step(0.5) , 0)
+        self.assertEqual(self.brakes.reason , "none")
 
     def test_new_id_does_not_inherit_approach_history(self):
         self.step(0 , [290 , 240 , 350 , 280])
@@ -123,7 +129,15 @@ class AutoBrakesTests(unittest.TestCase):
             value = self.brakes.brake(self.left_points , self.right_points , trackings , timestamp , 352 , 640)
         self.assertEqual(value , 1)
         self.assertEqual(self.brakes.target_id , 2)
+        self.assertEqual(self.brakes.reason , "emergency")
         self.assertEqual(set(trackings[1]) , {"box" , "direction" , "status"})
+
+    def test_near_condition_does_not_hide_stronger_ttc_reason(self):
+        for i in range(13):
+            timestamp = i * 0.05
+            self.step(timestamp , [290 , 300 - (50 + 40 * timestamp) , 350 , 300])
+        self.assertGreater(self.brakes.brake_value , 0.4)
+        self.assertEqual(self.brakes.reason , "ttc")
 
 
 class BrakeControllerTests(unittest.TestCase):

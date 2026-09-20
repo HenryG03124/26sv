@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import torch
 
-from Models.pixel_classifier_v2 import UNet
+from Models.pc_v2 import UNet
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 

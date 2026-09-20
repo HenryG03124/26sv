@@ -27,6 +27,7 @@ class AutoBrakes():
         self.target_id = None
         self.ttc = None
         self.lane_status = "missing"
+        self.reason = "none"
 
     def update_lanes(self , left_points , right_points , timestamp):
         if len(left_points) >= 2 and len(right_points) >= 2:
@@ -93,6 +94,7 @@ class AutoBrakes():
         brake = 0.0
         self.target_id = None
         self.ttc = None
+        self.reason = "none"
 
         for track_id , tracking in trackings.items():
             if tracking["status"] != "tracked":
@@ -109,17 +111,22 @@ class AutoBrakes():
             self.histories[track_id] = history
             ttc = self.calculate_ttc(history)
             target_brake = 0.0
+            target_reason = "none"
             emergency = False
 
             if self.in_lane(box , height , width):
                 if ttc is not None and ttc < ttc_brake:
                     target_brake = float(np.clip((ttc_brake - ttc) / (ttc_brake - ttc_full_brake) , 0 , 1))
                     target_brake = 0.3 + 0.7 * target_brake
+                    target_reason = "ttc"
                 if box[3] >= height * near_y_ratio and box_height >= height * near_height_ratio:
+                    if target_brake < 0.4:
+                        target_reason = "near"
                     target_brake = max(target_brake , 0.4)
                 emergency = box[3] >= height * emergency_y_ratio and box_height >= height * emergency_height_ratio
                 if emergency:
                     target_brake = 1.0
+                    target_reason = "emergency"
 
             if target_brake == 0:
                 self.risk_since.pop(track_id , None)
@@ -133,11 +140,14 @@ class AutoBrakes():
                 brake = target_brake
                 self.target_id = track_id
                 self.ttc = ttc
+                self.reason = target_reason
 
         if brake > 0:
             self.brake_value = brake
             self.last_risk_time = timestamp
         elif timestamp - self.last_risk_time > release_time:
             self.brake_value = 0.0
+        elif self.brake_value > 0:
+            self.reason = "hold"
 
         return self.brake_value

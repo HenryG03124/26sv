@@ -9,8 +9,8 @@ from MyImageIdentifier.pixel_classifier.bdd_pc_ds import BDDVehicleRoadDataset
 
 DATASETS_DIR = Path(__file__).resolve().parent.parent / "datasets"
 
-train_dataset = BDDVehicleRoadDataset(DATASETS_DIR / "processed_pc_ds/train_pairs.csv")
-val_dataset = BDDVehicleRoadDataset(DATASETS_DIR / "processed_pc_ds/val_pairs.csv")
+train_dataset = BDDVehicleRoadDataset(DATASETS_DIR / "processed_pc_ds_bdd100k/train_pairs.csv")
+val_dataset = BDDVehicleRoadDataset(DATASETS_DIR / "processed_pc_ds_bdd100k/val_pairs.csv")
 
 train_loader = tud.DataLoader(train_dataset , batch_size = 64 , shuffle = True)
 val_loader = tud.DataLoader(val_dataset , batch_size = 64 , shuffle = False)

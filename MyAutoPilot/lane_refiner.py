@@ -1,8 +1,9 @@
 import numpy as np
 import cv2
 
-max_gap_far = 24 #px
-max_gap_near = 24 #px
+max_gap_far = 48 #px
+max_gap_near = 48 #px
+init_y_window = 80 #px
 
 class LaneRefiner():
     def calculate_slope(points):
@@ -78,7 +79,7 @@ class LaneRefiner():
                 llane_x_center = np.mean(current_llane_x_indices)
                 if len(llane_sample_points) == 0:
                     llane_sample_points_init.append([llane_x_center , y])
-                    llane_sample_points_init = [point for point in llane_sample_points_init if point[1] - y <= 48][-8 : ] #create sliding windows (len = 8)
+                    llane_sample_points_init = [point for point in llane_sample_points_init if point[1] - y <= init_y_window][-8 : ] #create sliding windows (len = 8)
                     llane_sample_points = LaneRefiner.initialize_sampling(llane_sample_points_init)
                     if llane_sample_points:
                         prev_llane_x_center , prev_llane_y = llane_sample_points[-1]
@@ -96,7 +97,7 @@ class LaneRefiner():
                 rlane_x_center = np.mean(current_rlane_x_indices)
                 if len(rlane_sample_points) == 0:
                     rlane_sample_points_init.append([rlane_x_center , y])
-                    rlane_sample_points_init = [point for point in rlane_sample_points_init if point[1] - y <= 48][-8 : ] #create sliding windows (len = 8)
+                    rlane_sample_points_init = [point for point in rlane_sample_points_init if point[1] - y <= init_y_window][-8 : ] #create sliding windows (len = 8)
                     rlane_sample_points = LaneRefiner.initialize_sampling(rlane_sample_points_init)
                     if rlane_sample_points:
                         prev_rlane_x_center , prev_rlane_y = rlane_sample_points[-1]

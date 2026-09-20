@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import torch
 
-from Models.object_detector_Lite import ResNet
+from Models.od_Lite import ResNet
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 

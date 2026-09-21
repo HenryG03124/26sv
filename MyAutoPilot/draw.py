@@ -2,7 +2,20 @@ import numpy as np
 import cv2
 
 class Draw():
-    def draw_brake(frame , brake , target_id , ttc , lane_status):
+    def show_fps(frame , fps):
+        text = f"FPS: {fps:.1f}" if fps is not None else "FPS: --"
+        text_width = cv2.getTextSize(text , cv2.FONT_HERSHEY_SIMPLEX , 0.65 , 1)[0][0]
+        position = (frame.shape[1] - text_width - 12 , 26)
+        cv2.putText(frame , text , position , cv2.FONT_HERSHEY_SIMPLEX , 0.65 , (0 , 255 , 255) , 1 , cv2.LINE_AA)
+
+    def show_speed(frame , telemetry):
+        speed = telemetry["speed_kmh"]
+        text = f"SPEED: {speed:.1f} km/h" if speed is not None else f"SPEED: -- ({telemetry['status']})"
+        text_width = cv2.getTextSize(text , cv2.FONT_HERSHEY_SIMPLEX , 0.65 , 1)[0][0]
+        position = (frame.shape[1] - text_width - 12 , 52)
+        cv2.putText(frame , text , position , cv2.FONT_HERSHEY_SIMPLEX , 0.65 , (0 , 255 , 255) , 1 , cv2.LINE_AA)
+
+    def show_brakes(frame , brake , target_id , ttc , lane_status):
         target_text = "-" if target_id is None else str(target_id)
         ttc_text = "-" if ttc is None else f"{ttc:.1f}s"
         text = f"BRAKE:{brake:.2f} ID:{target_text} TTC:{ttc_text} LANE:{lane_status}"
@@ -10,6 +23,12 @@ class Draw():
         if brake == 0 and lane_status != "current":
             color = (0 , 180 , 255)
         cv2.putText(frame , text = text , org = (10 , 18) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = 0.4 , color = color , thickness = 1 , lineType = cv2.LINE_AA)
+
+    def show_refiner(frame , status , avalible_points):
+        for index , side in enumerate(("L" , "R")):
+            text = f"REFINER {side}: {status[side]} POINTS:{avalible_points[side]}"
+            color = (0 , 255 , 0) if status[side] == "tracking" else (0 , 180 , 255)
+            cv2.putText(frame , text = text , org = (10 , 36 + index * 18) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = 0.4 , color = color , thickness = 1 , lineType = cv2.LINE_AA)
 
     def draw_boxes(detector , frame , trackings , od_colors):
         for track_id , tracking in trackings.items():

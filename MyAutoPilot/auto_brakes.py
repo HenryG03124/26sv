@@ -31,7 +31,7 @@ class AutoBrakes():
 
     def update_lanes(self , left_points , right_points , timestamp):
         if len(left_points) >= 2 and len(right_points) >= 2:
-            self.left_points = sorted(left_points , key = lambda point: point[1])
+            self.left_points = sorted(left_points , key = lambda point: point[1]) #sort by y
             self.right_points = sorted(right_points , key = lambda point: point[1])
             self.last_lane_time = timestamp
             self.lane_status = "current"
@@ -44,14 +44,14 @@ class AutoBrakes():
 
     def lane_x(self , points , y , width):
         points = np.asarray(points , dtype = np.float64)
-        if y <= points[-1 , 1]:
+        if y <= points[-1 , 1]: #y <= y_far
             return float(np.interp(y , points[: , 1] , points[: , 0]))
 
         # Extend only the near end, using a short segment instead of the full polynomial.
-        near_points = points[points[: , 1] >= points[-1 , 1] - 24]
-        if len(near_points) < 2:
-            near_points = points[-2 : ]
-        slope = (near_points[-1 , 0] - near_points[0 , 0]) / (near_points[-1 , 1] - near_points[0 , 1])
+        near_points_far = points[points[: , 1] >= points[-1 , 1] - 24]
+        if len(near_points_far) < 2:
+            near_points_far = points[-2 : ]
+        slope = (near_points_far[-1 , 0] - near_points_far[0 , 0]) / (near_points_far[-1 , 1] - near_points_far[0 , 1])
         return float(np.clip(points[-1 , 0] + slope * (y - points[-1 , 1]) , 0 , width - 1))
 
     def in_lane(self , box , height , width):

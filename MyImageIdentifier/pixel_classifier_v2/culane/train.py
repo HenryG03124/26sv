@@ -19,7 +19,7 @@ road_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds_bdd100k/val_pa
 full_lane_train_dataset = CULaneDataset(DATASETS_DIR / "processed_pc_lane_ds_culane/train_pairs.csv")
 lane_val_dataset = CULaneDataset(DATASETS_DIR / "processed_pc_lane_ds_culane/val_pairs.csv")
 
-lane_train_sample_size = min(20000 , len(full_lane_train_dataset))
+lane_train_sample_size = min(50000 , len(full_lane_train_dataset))
 lane_sample_generator = torch.Generator().manual_seed(42)
 lane_train_indices = torch.randperm(len(full_lane_train_dataset) , generator = lane_sample_generator)[ : lane_train_sample_size].tolist()
 lane_train_dataset = tud.Subset(full_lane_train_dataset , lane_train_indices)

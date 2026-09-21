@@ -62,8 +62,10 @@ class SteeringTests(unittest.TestCase):
         values = self.trajectory([[320 , 220] , [320 , 320]])
         self.assertTrue(all(value == 0 for value in values))
 
-    def test_large_near_offset_takes_priority_over_far_preview(self):
-        for near_x , far_x , direction in ((280 , 400 , -1) , (360 , 240 , 1)):
+    def test_preview_can_countersteer_before_near_center_crossing(self):
+        # Aiming only at the near point keeps turning even when the road ahead
+        # has already crossed the vehicle axis. Preview should anticipate it.
+        for near_x , far_x , direction in ((280 , 400 , 1) , (360 , 240 , -1)):
             with self.subTest(near_x = near_x):
                 value = self.trajectory([[far_x , 220] , [near_x , 320]])[-1]
                 self.assertGreater(value * direction , 0)
@@ -83,7 +85,8 @@ class SteeringTests(unittest.TestCase):
             with self.subTest(target_x = target_x):
                 values = self.trajectory([[target_x , 220] , [target_x , 320]] , seconds = 2)
                 self.assertTrue(all(abs(value) <= steering_module.max_steering for value in values))
-                self.assertAlmostEqual(abs(values[-1]) , steering_module.max_steering)
+                limit = steering_module.max_steering / (1 + (steering_module.fallback_speed / 55) ** 2)
+                self.assertAlmostEqual(abs(values[-1]) , limit)
 
     def test_invalid_paths_return_at_the_same_rate_across_frame_rates(self):
         invalid_paths = (
@@ -190,6 +193,65 @@ class SteeringTests(unittest.TestCase):
         self.assertEqual(Steering._offset_rate , 0)
         self.assertEqual(Steering._offset_history , [])
         self.assertEqual(self.step([[320 , 220] , [320 , 320]]) , 0)
+
+    def test_recorded_near_jitter_with_stable_far_does_not_kick_right(self):
+        previous = 0
+        near_values = (313 , 299 , 329 , 319 , 304)
+        for near in near_values:
+            previous = self.step([[303 , 188] , [near , 292]] , previous , dt = 0.16 , y_far = 188)
+            self.assertLessEqual(previous , 0)
+            self.assertLessEqual(abs(Steering.diagnostics["rate_steering"]) , 0.02)
+
+    def test_speed_reduces_gain_and_increases_preview(self):
+        values = []
+        previews = []
+        for speed in (10 , 45 , 80):
+            Steering.reset()
+            previous = 0
+            for i in range(30):
+                previous = Steering.steering([[360 , 188] , [360 , 292]] , 188 , 3 , previous ,
+                                             speed_kmh = speed , timestamp = i / 10)
+            values.append(previous)
+            previews.append(Steering.diagnostics["preview_weight"])
+        self.assertGreater(values[0] , values[1])
+        self.assertGreater(values[1] , values[2])
+        self.assertLess(previews[0] , previews[1])
+        self.assertLessEqual(previews[1] , previews[2])
+
+    def test_missing_requested_near_endpoint_returns_to_neutral(self):
+        Steering.steering([[320 , 188] , [320 , 292]] , 188 , 3 , 0 , timestamp = 1 , y_near = 292)
+        value = Steering.steering([[350 , 188] , [350 , 284]] , 188 , 3 , 0.1 , timestamp = 1.1 , y_near = 292)
+        self.assertAlmostEqual(value , 0.05)
+        self.assertIsNone(Steering._prev_offset)
+
+    def test_capture_timestamp_is_used_instead_of_processing_completion(self):
+        points = [[400 , 188] , [400 , 292]]
+        Steering.steering(points , 188 , 3 , 0 , timestamp = 1)
+        self.now += 4
+        value = Steering.steering(points , 188 , 3 , 0 , timestamp = 1.04)
+        self.assertAlmostEqual(value , steering_module.steering_rate * 0.04)
+
+    def test_simple_bicycle_feedback_converges_at_multiple_frame_rates(self):
+        # A synthetic camera/bicycle sanity check, NOT an ETS2 calibration.
+        for fps in (8 , 20 , 60):
+            with self.subTest(fps = fps):
+                Steering.reset()
+                lateral = 0.6 #m right of center
+                heading = 0.03 #rad right of road direction
+                previous = 0
+                errors = []
+                dt = 1 / fps
+                for i in range(25 * fps):
+                    points = [[320 - 320 * (lateral / 25 + heading) , 188] ,
+                              [320 - 320 * (lateral / 8 + heading) , 292]]
+                    previous = Steering.steering(points , 188 , 3 , previous , speed_kmh = 45 , timestamp = i * dt)
+                    heading += 12.5 / 5 * math.tan(previous * 0.65) * dt
+                    lateral += 12.5 * math.sin(heading) * dt
+                    errors.append(lateral)
+                # The 2px deadband corresponds to about 0.1m in this toy camera.
+                self.assertLess(abs(lateral) , 0.15)
+                self.assertLess(max(abs(value) for value in errors[-5 * fps:]) , 0.15)
+                self.assertGreater(min(errors) , -0.35)
 
 
 if __name__ == "__main__":

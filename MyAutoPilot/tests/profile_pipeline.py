@@ -18,7 +18,6 @@ from MyAutoPilot.pixel_classifier_v2 import PixelClassifierV2
 from MyAutoPilot.object_detector import ObjectDetectorLite
 from MyAutoPilot.mov_detector import MovDetector
 from MyAutoPilot.lane_refiner import LaneRefiner
-from MyAutoPilot.road_center import RoadCenter
 from MyAutoPilot.steering import Steering
 from MyAutoPilot.auto_brakes import AutoBrakes
 from MyAutoPilot.draw import Draw
@@ -71,23 +70,23 @@ def main():
             boxes , scores , labels = detector.box_filter(positions , boxes , scores , labels , 640 , 352 , mask , 0.5)
             trackings = movement.update(boxes , scores , labels , timestamp , 70)
             mark("filter_tracking")
-            sample_left , sample_right , left , right = refiner.refine(mask , 2 , 10 , return_sample = True)
+            llane_sample_points , rlane_sample_points , llane_points , rlane_points = refiner.refine(mask , 2 , 10 , return_sample = True)
+            center = refiner.calculate_center_points(llane_points , rlane_points)
             mark("refiner")
-            center = RoadCenter.center_points_filter(RoadCenter.detect_from_lr(mask , left , right) , 10)
             previous = Steering.steering(center , 188 , 3 , previous , telemetry["speed_kmh"] , timestamp , 292)
-            brake = brakes.brake(left , right , trackings , timestamp , 352 , 640)
+            brake = brakes.brake(llane_points , rlane_points , trackings , timestamp , 352 , 640)
             mark("steering_brake")
             display = cv2.resize(frame , (640 , 352))
             lane_mask = np.zeros_like(mask)
-            if left and right:
-                cv2.fillPoly(lane_mask , [np.array(left + right[::-1] , dtype = np.int32)] , 1)
+            if llane_points and rlane_points:
+                cv2.fillPoly(lane_mask , [np.array(llane_points + rlane_points[::-1] , dtype = np.int32)] , 1)
             colors = np.array([[0 , 0 , 0] , [0 , 255 , 0] , [0 , 0 , 255] , [0 , 255 , 255]] , dtype = np.uint8)
             active = ((mask == 1) & (lane_mask > 0)) | (mask == 2) | (mask == 3)
             blended = cv2.addWeighted(display , 0.7 , colors[mask] , 0.3 , 0)
             display[active] = blended[active]
             Draw.draw_boxes(detector , display , trackings , ((255 , 64 , 64) , (64 , 128 , 255)))
-            Draw.draw_lane_points(display , sample_left , sample_right)
-            Draw.draw_lane_lines(display , left , right)
+            Draw.draw_lane_points(display , llane_sample_points , rlane_sample_points)
+            Draw.draw_lane_lines(display , llane_points , rlane_points)
             Draw.draw_road_center(display , center , 188 , 292)
             Draw.draw_refiner(display , refiner.status , refiner.avalible_points)
             Draw.draw_brake(display , brake , brakes.target_id , brakes.ttc , brakes.lane_status)
@@ -95,8 +94,8 @@ def main():
             Draw.show_fps(display , 0)
             Draw.show_speed(display , telemetry)
             mark("draw_resize_no_gui")
-            logger.write(timestamp , {"center_points": center , "left_points": left , "right_points": right ,
-                                      "lane_sample_points": {"L": sample_left , "R": sample_right} ,
+            logger.write(timestamp , {"center_points": center , "llane_points": llane_points , "rlane_points": rlane_points ,
+                                      "lane_sample_points": {"L": llane_sample_points , "R": rlane_sample_points} ,
                                       "trackings": trackings , "telemetry": telemetry , "steering": previous})
             mark("logging")
             timings["total_no_control_no_gui"] = (time.perf_counter() - start) * 1000

@@ -23,7 +23,6 @@ class MovDetector():
             for box_index in np.where(selected)[0]:
                 candidates.append((float(distances[box_index]) , track_id , int(box_index)))
 
-        
         matches = {}
         matched_tracks = set()
         for distance , track_id , box_index in sorted(candidates):
@@ -79,5 +78,3 @@ class MovDetector():
             }
 
         return self.trackings
-
-

@@ -1,19 +1,24 @@
 import numpy as np
 import cv2
 
+fontScale = 0.8
+text_margin = 12
+text_top = 30
+text_line_height = 32
+
 class Draw():
     def show_fps(frame , fps):
         text = f"FPS: {fps:.1f}" if fps is not None else "FPS: --"
-        text_width = cv2.getTextSize(text , cv2.FONT_HERSHEY_SIMPLEX , 0.65 , 1)[0][0]
-        position = (frame.shape[1] - text_width - 12 , 26)
-        cv2.putText(frame , text , position , cv2.FONT_HERSHEY_SIMPLEX , 0.65 , (0 , 255 , 255) , 1 , cv2.LINE_AA)
+        text_width = cv2.getTextSize(text , cv2.FONT_HERSHEY_SIMPLEX , fontScale , 1)[0][0]
+        position = (frame.shape[1] - text_width - text_margin , text_top)
+        cv2.putText(frame , text = text , org = position , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = (0 , 255 , 255) , thickness = 1 , lineType = cv2.LINE_AA)
 
     def show_speed(frame , telemetry):
         speed = telemetry["speed_kmh"]
         text = f"SPEED: {speed:.1f} km/h" if speed is not None else f"SPEED: -- ({telemetry['status']})"
-        text_width = cv2.getTextSize(text , cv2.FONT_HERSHEY_SIMPLEX , 0.65 , 1)[0][0]
-        position = (frame.shape[1] - text_width - 12 , 52)
-        cv2.putText(frame , text , position , cv2.FONT_HERSHEY_SIMPLEX , 0.65 , (0 , 255 , 255) , 1 , cv2.LINE_AA)
+        text_width = cv2.getTextSize(text , cv2.FONT_HERSHEY_SIMPLEX , fontScale , 1)[0][0]
+        position = (frame.shape[1] - text_width - text_margin , text_top + text_line_height)
+        cv2.putText(frame , text = text , org = position , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = (0 , 255 , 255) , thickness = 1 , lineType = cv2.LINE_AA)
 
     def show_brakes(frame , brake , target_id , ttc , lane_status):
         target_text = "-" if target_id is None else str(target_id)
@@ -22,13 +27,13 @@ class Draw():
         color = (0 , 0 , 255) if brake > 0 else (0 , 255 , 0)
         if brake == 0 and lane_status != "current":
             color = (0 , 180 , 255)
-        cv2.putText(frame , text = text , org = (10 , 18) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = 0.4 , color = color , thickness = 1 , lineType = cv2.LINE_AA)
+        cv2.putText(frame , text = text , org = (text_margin , text_top) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = color , thickness = 1 , lineType = cv2.LINE_AA)
 
     def show_refiner(frame , status , avalible_points):
         for index , side in enumerate(("L" , "R")):
             text = f"REFINER {side}: {status[side]} POINTS:{avalible_points[side]}"
             color = (0 , 255 , 0) if status[side] == "tracking" else (0 , 180 , 255)
-            cv2.putText(frame , text = text , org = (10 , 36 + index * 18) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = 0.4 , color = color , thickness = 1 , lineType = cv2.LINE_AA)
+            cv2.putText(frame , text = text , org = (text_margin , text_top + (index + 1) * text_line_height) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = color , thickness = 1 , lineType = cv2.LINE_AA)
 
     def draw_boxes(detector , frame , trackings , od_colors):
         for track_id , tracking in trackings.items():
@@ -64,8 +69,8 @@ class Draw():
         for point in rlane_sample_points:
             cv2.circle(frame , center = (int(point[0]) , int(point[1])) , radius = 1 , color = (0 , 0 , 0) , thickness = -1  ,lineType = cv2.LINE_AA)
 
-    def draw_lane_lines(frame , left_points , right_points):
-        for lane_points in (left_points , right_points):
+    def draw_lane_lines(frame , llane_points , rlane_points):
+        for lane_points in (llane_points , rlane_points):
             if len(lane_points) < 3:
                 continue
 

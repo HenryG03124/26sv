@@ -11,15 +11,15 @@ from MyAutoPilot.auto_brakes import AutoBrakes
 class AutoBrakesTests(unittest.TestCase):
     def setUp(self):
         self.brakes = AutoBrakes()
-        self.left_points = [[220 , 188] , [180 , 268] , [168 , 292]]
-        self.right_points = [[420 , 188] , [460 , 268] , [472 , 292]]
+        self.llane_points = [[220 , 188] , [180 , 268] , [168 , 292]]
+        self.rlane_points = [[420 , 188] , [460 , 268] , [472 , 292]]
 
     def tracking(self , box , direction = "stationary" , status = "tracked"):
         return {"box": box , "direction": direction , "status": status}
 
     def step(self , timestamp , box = None , track_id = 1 , direction = "stationary" , lanes = True):
         trackings = {} if box is None else {track_id: self.tracking(box , direction)}
-        return self.brakes.brake(self.left_points if lanes else [] , self.right_points if lanes else [] , trackings , timestamp , 352 , 640)
+        return self.brakes.brake(self.llane_points if lanes else [] , self.rlane_points if lanes else [] , trackings , timestamp , 352 , 640)
 
     def test_static_distant_car_does_not_brake(self):
         for i in range(20):
@@ -82,13 +82,13 @@ class AutoBrakesTests(unittest.TestCase):
         self.assertEqual(self.step(0 , [290 , 240 , 350 , 352]) , 1)
 
     def test_near_extension_is_bounded(self):
-        self.left_points = [[220 , 188] , [200 , 230]]
-        self.right_points = [[420 , 188] , [440 , 230]]
+        self.llane_points = [[220 , 188] , [200 , 230]]
+        self.rlane_points = [[420 , 188] , [440 , 230]]
         self.assertEqual(self.step(0 , [290 , 250 , 350 , 352]) , 0)
 
     def test_lost_track_cannot_trigger_braking(self):
         trackings = {1: self.tracking([290 , 250 , 350 , 320] , status = "lost")}
-        self.assertEqual(self.brakes.brake(self.left_points , self.right_points , trackings , 0 , 352 , 640) , 0)
+        self.assertEqual(self.brakes.brake(self.llane_points , self.rlane_points , trackings , 0 , 352 , 640) , 0)
 
     def test_release_holds_through_short_detection_dropout(self):
         self.step(0 , [290 , 250 , 350 , 320])
@@ -117,7 +117,7 @@ class AutoBrakesTests(unittest.TestCase):
 
     def test_far_and_crossed_boundaries_are_not_used(self):
         self.assertEqual(self.step(0 , [290 , 80 , 350 , 180]) , 0)
-        self.left_points , self.right_points = self.right_points , self.left_points
+        self.llane_points , self.rlane_points = self.rlane_points , self.llane_points
         self.assertEqual(self.step(0.1 , [290 , 250 , 350 , 320]) , 0)
 
     def test_strongest_target_wins_without_mutating_trackings(self):
@@ -126,7 +126,7 @@ class AutoBrakesTests(unittest.TestCase):
             2: self.tracking([320 , 250 , 380 , 320]) ,
         }
         for timestamp in (0 , 0.2):
-            value = self.brakes.brake(self.left_points , self.right_points , trackings , timestamp , 352 , 640)
+            value = self.brakes.brake(self.llane_points , self.rlane_points , trackings , timestamp , 352 , 640)
         self.assertEqual(value , 1)
         self.assertEqual(self.brakes.target_id , 2)
         self.assertEqual(self.brakes.reason , "emergency")

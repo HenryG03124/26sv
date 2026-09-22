@@ -16,7 +16,7 @@ from MyImageIdentifier.pixel_classifier_v2.culane.pc_v2_culane_ds import CULaneD
 
 road_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds_bdd100k/train_pairs.csv")
 road_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds_bdd100k/val_pairs.csv")
-full_lane_train_dataset = CULaneDataset(DATASETS_DIR / "processed_pc_lane_ds_culane/train_pairs.csv")
+full_lane_train_dataset = CULaneDataset(DATASETS_DIR / "processed_pc_lane_ds_culane/train_pairs.csv" , augment = True)
 lane_val_dataset = CULaneDataset(DATASETS_DIR / "processed_pc_lane_ds_culane/val_pairs.csv")
 
 lane_train_sample_size = min(50000 , len(full_lane_train_dataset))
@@ -151,7 +151,7 @@ def evaluate_task(loader , task , criterion , classes):
 loss_set = []
 miou_set = []
 
-for epoch in range(30):
+for epoch in range(20):
     try:
         print("\nepoch:" , epoch + 1 , "training" , flush = True)
         road_training = train_task(road_train_loader , "road" , road_criterion , 3)

@@ -15,21 +15,21 @@ class DrawStatusTests(unittest.TestCase):
         calls = put_text.call_args_list
         self.assertEqual(len(calls) , 2)
         for call in calls:
-            self.assertEqual(call.args[5] , (0 , 255 , 255))
-            self.assertEqual(call.args[6] , 1)
-        self.assertEqual(calls[0].args[1] , "FPS: 7.1")
-        self.assertEqual(calls[1].args[1] , "SPEED: 45.2 km/h")
-        self.assertGreater(calls[0].args[2][0] , 320)
-        self.assertEqual(calls[0].args[2][1] , 26)
-        self.assertEqual(calls[1].args[2][1] , 52)
+            self.assertEqual(call.kwargs["color"] , (0 , 255 , 255))
+            self.assertEqual(call.kwargs["thickness"] , 1)
+        self.assertEqual(calls[0].kwargs["text"] , "FPS: 7.1")
+        self.assertEqual(calls[1].kwargs["text"] , "SPEED: 45.2 km/h")
+        self.assertGreater(calls[0].kwargs["org"][0] , 320)
+        self.assertEqual(calls[0].kwargs["org"][1] , 30)
+        self.assertEqual(calls[1].kwargs["org"][1] , 62)
 
     def test_missing_telemetry_is_not_displayed_as_zero_speed(self):
         frame = np.zeros((352 , 640 , 3) , dtype = np.uint8)
         with patch("MyAutoPilot.draw.cv2.putText") as put_text:
             Draw.show_speed(frame , {"speed_kmh": None , "status": "missing"})
             Draw.show_fps(frame , None)
-        self.assertEqual(put_text.call_args_list[0].args[1] , "SPEED: -- (missing)")
-        self.assertEqual(put_text.call_args_list[1].args[1] , "FPS: --")
+        self.assertEqual(put_text.call_args_list[0].kwargs["text"] , "SPEED: -- (missing)")
+        self.assertEqual(put_text.call_args_list[1].kwargs["text"] , "FPS: --")
 
     def test_text_does_not_draw_a_dark_outline(self):
         frame = np.full((352 , 640 , 3) , 100 , dtype = np.uint8)

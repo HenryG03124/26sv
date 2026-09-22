@@ -1,5 +1,4 @@
 import numpy as np
-import cv2
 
 max_gap_far = 48 #px
 max_gap_near = 48 #px
@@ -150,7 +149,19 @@ class LaneRefiner():
         self.status[sides] = "tracking"
         return lane_points
 
+    def calculate_center_points(self , llane_points , rlane_points):
+        if not llane_points or not rlane_points:
+            return []
+
+        llane_yxdict = {y : x for x , y in llane_points}
+        rlane_yxdict = {y : x for x , y in rlane_points}
+        common_y_values = sorted(llane_yxdict.keys() & rlane_yxdict.keys() , reverse = True)
+        center_points = [[(llane_yxdict[y] + rlane_yxdict[y]) // 2 , y] for y in common_y_values]
+
+        return center_points
+
     def refine(self , mask , degree , sgl_lane_px_offset , return_sample = False):
+        """Return left and right lane points, optionally preceded by both samples."""
         height , width = mask.shape
         llane_sample_points , rlane_sample_points = self.sample_lane_points(mask , sgl_lane_px_offset , 4)
 

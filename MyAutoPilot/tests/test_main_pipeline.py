@@ -15,7 +15,7 @@ class MainPipelineTests(unittest.TestCase):
     def test_three_frames_wire_telemetry_and_fps_without_devices(self):
         aliases = {name: importlib.import_module("MyAutoPilot." + name)
                    for name in ("screen_capture" , "draw" , "pixel_classifier_v2" , "object_detector" ,
-                                "mov_detector" , "lane_refiner" , "road_center" , "steering" ,
+                                "mov_detector" , "lane_refiner" , "steering" ,
                                 "auto_brakes" , "logger" , "scs_telemetry")}
         controller = Mock()
         aliases["input_controller"] = types.SimpleNamespace(InputController = Mock(return_value = controller))
@@ -66,6 +66,10 @@ class MainPipelineTests(unittest.TestCase):
             module.Steering.reset()
         self.assertEqual(len(records) , 3)
         self.assertEqual(capture.capture_window.call_count , 3)
+        self.assertEqual(movement.update.call_count , 3)
+        for call in movement.update.call_args_list:
+            self.assertEqual(call.args[:3] , ([] , [] , []))
+            self.assertEqual(call.args[4] , module.spd)
         capture.capture_window.assert_called_with("Euro Truck Simulator 2")
         capture.capture_frame.assert_not_called()
         self.assertIsNone(records[0]["fps"])
@@ -73,6 +77,8 @@ class MainPipelineTests(unittest.TestCase):
         self.assertEqual(records[2]["steering_debug"]["speed_kmh"] , 45)
         self.assertFalse(records[2]["steering_debug"]["speed_fallback"])
         for record in records:
+            self.assertEqual(record["center_points"] , [[330 , y] for y in range(module.y_near , module.y_far - 1 , -1)])
+            self.assertNotIn("road_center_mode" , record)
             self.assertNotIn("timings_ms" , record)
             self.assertNotIn("timings_frame_id" , record)
         self.assertEqual(fps.call_count , 3)

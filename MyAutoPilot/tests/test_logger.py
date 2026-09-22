@@ -8,7 +8,7 @@ import numpy as np
 
 from MyAutoPilot.logger import Logger
 from MyAutoPilot.mov_detector import MovDetector
-from MyAutoPilot.road_center import RoadCenter
+from MyAutoPilot.lane_refiner import LaneRefiner
 
 
 class LoggerTests(unittest.TestCase):
@@ -36,30 +36,27 @@ class LoggerTests(unittest.TestCase):
                 logger.close()
             self.assertTrue(logger.file.closed)
 
-    def test_real_tracking_and_both_center_modes_are_json_serializable(self):
+    def test_real_tracking_and_refined_center_are_json_serializable(self):
         mask = np.ones((352 , 640) , dtype = np.uint8)
         mask[: , 200] = 3
         mask[: , 440] = 3
-        left_points = [[200 , y] for y in range(188 , 293)]
-        right_points = [[440 , y] for y in range(188 , 293)]
+        refiner = LaneRefiner(188 , 292 , 10)
+        llane_points , rlane_points = refiner.refine(mask , 2 , 10)
+        center_points = refiner.calculate_center_points(llane_points , rlane_points)
         trackings = MovDetector().update([[290 , 224 , 350 , 280]] , [0.9] , [1] , 100.0 , 70)
-        centers = [
-            RoadCenter.detect_from_lr(mask , left_points , right_points) ,
-            RoadCenter.detect_from_mask(mask , 188 , 292) ,
-        ]
         with tempfile.TemporaryDirectory() as directory:
             logger = Logger(Path(directory) / "logs")
             try:
-                for center_points in centers:
-                    logger.write(logger.start_time , {
-                        "left_points": left_points ,
-                        "right_points": right_points ,
-                        "center_points": RoadCenter.center_points_filter(center_points , 10) ,
-                        "trackings": trackings ,
-                    })
+                logger.write(logger.start_time , {
+                    "llane_points": llane_points ,
+                    "rlane_points": rlane_points ,
+                    "center_points": center_points ,
+                    "trackings": trackings ,
+                })
                 records = [json.loads(line) for line in Path(logger.file.name).read_text(encoding = "utf-8").splitlines()]
-                self.assertEqual(len(records) , 2)
-                self.assertEqual(records[1]["data"]["trackings"]["0"]["status"] , "tracked")
+                self.assertEqual(len(records) , 1)
+                self.assertEqual(records[0]["data"]["center_points"] , [[320 , y] for y in range(292 , 187 , -1)])
+                self.assertEqual(records[0]["data"]["trackings"]["0"]["status"] , "tracked")
             finally:
                 logger.close()
 

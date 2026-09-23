@@ -13,8 +13,8 @@ DATASETS_DIR = SCRIPT_DIR.parent.parent / "datasets"
 
 from MyImageIdentifier.pixel_classifier_v2.bdd100k.pc_v2_bdd100k_ds import BDDLaneDataset
 
-road_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds_bdd100k/train_pairs.csv")
-road_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds_bdd100k/val_pairs.csv")
+road_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds/train_pairs.csv")
+road_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds/val_pairs.csv")
 full_lane_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_lane_ds_bdd100k/train_pairs.csv")
 lane_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_lane_ds_bdd100k/val_pairs.csv")
 

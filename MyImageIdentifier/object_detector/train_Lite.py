@@ -11,8 +11,8 @@ from MyImageIdentifier.object_detector.bdd_objdetect_ds import BDDDetectionDatas
 
 DATASETS_DIR = Path(__file__).resolve().parent.parent / "datasets"
 
-full_train_dataset = BDDDetectionDataset(DATASETS_DIR / "processed_objdetect_ds_bdd100k/train_pairs.csv")
-val_dataset = BDDDetectionDataset(DATASETS_DIR / "processed_objdetect_ds_bdd100k/val_pairs.csv")
+full_train_dataset = BDDDetectionDataset(DATASETS_DIR / "processed_objdetect_ds/train_pairs.csv")
+val_dataset = BDDDetectionDataset(DATASETS_DIR / "processed_objdetect_ds/val_pairs.csv")
 
 train_sample_size = min(30000 , len(full_train_dataset))
 sample_generator = torch.Generator().manual_seed(42)

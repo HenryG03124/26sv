@@ -23,7 +23,7 @@ class Draw():
     def show_brakes(frame , brake , target_id , ttc , lane_status):
         target_text = "-" if target_id is None else str(target_id)
         ttc_text = "-" if ttc is None else f"{ttc:.1f}s"
-        text = f"BRAKE:{brake:.2f} ID:{target_text} TTC:{ttc_text} LANE:{lane_status}"
+        text = f"BRAKE:{brake:.2f} ID:{target_text} TTC:{ttc_text} \nLANE:{lane_status}"
         color = (0 , 0 , 255) if brake > 0 else (0 , 255 , 0)
         if brake == 0 and lane_status != "current":
             color = (0 , 180 , 255)
@@ -33,7 +33,7 @@ class Draw():
         for index , side in enumerate(("L" , "R")):
             text = f"REFINER {side}: {status[side]} POINTS:{avalible_points[side]}"
             color = (0 , 255 , 0) if status[side] == "tracking" else (0 , 180 , 255)
-            cv2.putText(frame , text = text , org = (text_margin , text_top + (index + 1) * text_line_height) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = color , thickness = 1 , lineType = cv2.LINE_AA)
+            cv2.putText(frame , text = text , org = (text_margin , text_top + (index + 2) * text_line_height) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = color , thickness = 1 , lineType = cv2.LINE_AA)
 
     def draw_boxes(detector , frame , trackings , od_colors):
         for track_id , tracking in trackings.items():

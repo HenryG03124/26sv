@@ -12,10 +12,14 @@ L = 200
 Ld = 12
 
 # Image-space preview controller. K_steering = 3 uses these base gains.
-offset_gain = 0.45
+# Keep preview and output constraints separate, as in PythonRobotics path tracking.
+# These are joystick/image units, not calibrated Stanley or pure-pursuit angles.
+base_offset_gain = 0.45
+offset_gain = 0.65
 offset_rate_gain = 0.08
 preview_gain = 0.08
 offset_deadband = 2 / (width / 2)
+correction_boost_start = 4 / (width / 2)
 offset_priority = 24 / (width / 2)
 max_steering = 0.18
 max_offset_rate_steering = 0.02
@@ -28,6 +32,10 @@ offset_rate_tau = 0.1 #seconds , the window already smooths the trend
 reset_interval = 0.5 #seconds
 offset_tau = 0.1 #seconds
 fallback_speed = 45 #km/h , conservative when telemetry is unavailable
+lane_hold_time = 0.18 #seconds , bridge a brief detection dropout
+lane_hold_distance = 3.0 #m , shorten the hold at high speed
+path_confirm_time = 0.12 #seconds , reject isolated lane switches
+path_confirm_tolerance = 0.06 #normalized image offset
 
 class Steering():
     _prev_time = None
@@ -35,10 +43,16 @@ class Steering():
     _offset_rate = 0.0
     _offset_history = []
     _filtered_offset = None
+    _last_valid_time = None
+    _hold_until = None
+    _pending_offset = None
+    _pending_since = None
     diagnostics = {}
 
     def reset():
         Steering._prev_time = None
+        Steering._last_valid_time = None
+        Steering._hold_until = None
         Steering._reset_tracking()
 
     def _reset_tracking():
@@ -46,7 +60,27 @@ class Steering():
         Steering._offset_rate = 0.0
         Steering._offset_history = []
         Steering._filtered_offset = None
+        Steering._pending_offset = None
+        Steering._pending_since = None
         Steering.diagnostics = {}
+
+    def _unavailable(current_time , steering_prev , dt , reason = "missing" , clear_path = True):
+        if clear_path:
+            Steering._reset_tracking()
+        # Never extend the deadline with another invalid frame, or build more lock.
+        holding = Steering._hold_until is not None and current_time <= Steering._hold_until
+        if holding:
+            steering = float(np.clip(steering_prev , -max_steering , max_steering)) if np.isfinite(steering_prev) else 0.0
+        else:
+            # Only decay for the portion of this interval after the hold expired.
+            decay_dt = dt if Steering._hold_until is None else min(dt , max(0 , current_time - Steering._hold_until))
+            steering = Steering._limit_steering(0 , steering_prev , decay_dt)
+        Steering.diagnostics = {
+            "status": "held" if holding and reason == "missing" else reason ,
+            "holding": holding , "steering_output": steering ,
+            "path_age_s": None if Steering._last_valid_time is None else max(0 , current_time - Steering._last_valid_time) ,
+        }
+        return steering
 
     def _calculate_offset_rate(offset , current_time , elapsed):
         Steering._offset_history.append((current_time , offset))
@@ -101,7 +135,7 @@ class Steering():
             existing_y = set(points[: , 1])
             valid = y_far in existing_y and y_near in existing_y
         if not valid:
-            # main handles missing-lane output decay; discard the derivative history.
+            # Compatibility validation helper; the active steering() manages dropout holds.
             Steering.reset()
         return valid
 
@@ -127,6 +161,10 @@ class Steering():
 
     def steering(center_points , y_far , K_steering , steering_prev , speed_kmh = None , timestamp = None , y_near = None):
         current_time = time.monotonic() if timestamp is None else timestamp
+        if not np.isfinite(current_time):
+            Steering.reset()
+            Steering.diagnostics = {"status": "invalid_time" , "steering_output": 0.0}
+            return 0.0
         elapsed = current_time - Steering._prev_time if Steering._prev_time is not None else 0.1
         if elapsed <= 0 or elapsed > reset_interval:
             Steering.reset()
@@ -134,25 +172,24 @@ class Steering():
         dt = min(elapsed , 0.2)
         Steering._prev_time = current_time
 
+        if not np.isfinite(K_steering) or K_steering <= 0:
+            Steering._last_valid_time = None
+            Steering._hold_until = None
+            return Steering._unavailable(current_time , steering_prev , dt , "invalid_gain")
         points = Steering._validate_points(center_points)
-        if points is None or not np.isfinite(K_steering) or K_steering <= 0:
-            # Discard path history without losing the output rate-limit clock.
-            Steering._reset_tracking()
-            return Steering._limit_steering(0 , steering_prev , dt)
+        if points is None:
+            return Steering._unavailable(current_time , steering_prev , dt)
         points = points[points[: , 1] >= y_far]
         if y_near is not None:
             points = points[points[: , 1] <= y_near]
             if y_near not in points[: , 1]:
-                Steering._reset_tracking()
-                return Steering._limit_steering(0 , steering_prev , dt)
+                return Steering._unavailable(current_time , steering_prev , dt)
         if len(points) < 2 or y_far not in points[: , 1]:
-            Steering._reset_tracking()
-            return Steering._limit_steering(0 , steering_prev , dt)
+            return Steering._unavailable(current_time , steering_prev , dt)
 
         y_near = np.max(points[: , 1])
         if not 0 <= y_far < y_near < reference_y:
-            Steering._reset_tracking()
-            return Steering._limit_steering(0 , steering_prev , dt)
+            return Steering._unavailable(current_time , steering_prev , dt)
 
         # A short band avoids making the controller depend on one endpoint pixel.
         near_x = np.median(points[points[: , 1] >= y_near - 8 , 0])
@@ -160,23 +197,33 @@ class Steering():
         offset = (near_x - width / 2) / (width / 2)
         offset_far = (far_x - width / 2) / (width / 2)
 
-        speed = fallback_speed if speed_kmh is None else abs(speed_kmh)
-        speed_scale = 1 / (1 + (speed / 60) ** 2)
+        speed_fallback = speed_kmh is None or not np.isfinite(speed_kmh)
+        speed = fallback_speed if speed_fallback else abs(speed_kmh)
+        # The old quadratic attenuation removed most correction authority at 80+ km/h.
+        speed_scale = 1 / math.hypot(1 , speed / 60)
         preview_weight = min(0.35 + speed / 150 , 0.7)
         # Both offsets use the same image units. This is NOT calibrated pure pursuit.
         offset_near = offset
         offset = (1 - preview_weight) * offset_near + preview_weight * offset_far
 
+        path_reacquired = False
         if Steering._prev_offset is not None:
             offset_diff = offset - Steering._prev_offset
-            # A sudden path switch must not become a large derivative command.
+            # Keep the last accepted path as the reference until a new one persists.
             if abs(offset_diff) > 0.12 + 0.5 * dt:
-                Steering._prev_offset = offset
+                if Steering._pending_offset is None or abs(offset - Steering._pending_offset) > path_confirm_tolerance:
+                    Steering._pending_offset = offset
+                    Steering._pending_since = current_time
                 Steering._offset_rate = 0.0
-                Steering._offset_history = [(current_time , offset)]
-                Steering._filtered_offset = None
-                Steering.diagnostics = {"status": "path_jump" , "target_offset": float(offset)}
-                return Steering._limit_steering(0 , steering_prev , dt)
+                Steering._offset_history = []
+                if current_time - Steering._pending_since < path_confirm_time:
+                    steering = Steering._unavailable(current_time , steering_prev , dt , "path_jump" , clear_path = False)
+                    Steering.diagnostics["target_offset"] = float(offset)
+                    return steering
+                Steering._reset_tracking()
+                path_reacquired = True
+        Steering._pending_offset = None
+        Steering._pending_since = None
         Steering._calculate_offset_rate(offset , current_time , elapsed)
         Steering._prev_offset = offset
 
@@ -186,18 +233,33 @@ class Steering():
         Steering._filtered_offset += weight * (offset - Steering._filtered_offset)
         gain = min(K_steering / 3 , 2) * speed_scale
         offset_error = math.copysign(max(abs(Steering._filtered_offset) - offset_deadband , 0) , Steering._filtered_offset)
-        offset_steering = gain * offset_gain * offset_error
-        rate_steering = Steering._calculate_rate_steering(offset , offset_steering , gain)
-        steering_limit = max_steering / (1 + (speed / 55) ** 2)
-        steering_raw = float(np.clip(offset_steering + rate_steering , -steering_limit , steering_limit))
+        # Preserve the old response to small errors, then smoothly add authority
+        # between 4px and 24px. A tiny centerline wobble does not need the boost.
+        correction_boost = float(np.clip((abs(Steering._filtered_offset) - correction_boost_start) /
+                                         (offset_priority - correction_boost_start) , 0 , 1))
+        effective_offset_gain = base_offset_gain * speed_scale + correction_boost * (offset_gain - base_offset_gain * speed_scale)
+        offset_steering = gain * effective_offset_gain * offset_error
+        # Increase sustained correction without increasing the old derivative/noise gain.
+        rate_steering = Steering._calculate_rate_steering(offset , offset_steering , gain * speed_scale)
+        steering_limit = max_steering / math.hypot(1 , speed / 70)
+        steering_requested = offset_steering + rate_steering
+        steering_raw = float(np.clip(steering_requested , -steering_limit , steering_limit))
         steering = Steering._limit_steering(steering_raw , steering_prev , dt)
+        Steering._last_valid_time = current_time
+        hold_duration = min(lane_hold_time , lane_hold_distance / max(speed / 3.6 , 0.1))
+        Steering._hold_until = current_time + hold_duration
         Steering.diagnostics = {
-            "status": "tracking" , "speed_kmh": float(speed) , "speed_fallback": speed_kmh is None ,
+            "status": "tracking" , "speed_kmh": float(speed) , "speed_fallback": speed_fallback ,
             "near_x": float(near_x) , "far_x": float(far_x) ,
             "preview_weight": float(preview_weight) , "target_offset": float(offset) ,
             "filtered_offset": float(Steering._filtered_offset) , "offset_rate": float(Steering._offset_rate) ,
             "offset_steering": float(offset_steering) , "rate_steering": float(rate_steering) ,
             "steering_raw": steering_raw , "steering_limit": float(steering_limit) ,
+            "steering_requested": float(steering_requested) , "steering_output": steering ,
+            "saturated": bool(abs(steering_requested) > steering_limit) ,
+            "rate_limited": bool(abs(steering - steering_raw) > 1e-9) ,
+            "path_reacquired": path_reacquired , "hold_duration_s": hold_duration ,
+            "correction_boost": correction_boost ,
         }
         return steering
 

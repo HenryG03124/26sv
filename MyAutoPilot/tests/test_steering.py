@@ -85,8 +85,8 @@ class SteeringTests(unittest.TestCase):
             with self.subTest(target_x = target_x):
                 values = self.trajectory([[target_x , 220] , [target_x , 320]] , seconds = 2)
                 self.assertTrue(all(abs(value) <= steering_module.max_steering for value in values))
-                limit = steering_module.max_steering / (1 + (steering_module.fallback_speed / 55) ** 2)
-                self.assertAlmostEqual(abs(values[-1]) , limit)
+                self.assertAlmostEqual(abs(values[-1]) , Steering.diagnostics["steering_limit"])
+                self.assertTrue(Steering.diagnostics["saturated"])
 
     def test_invalid_paths_return_at_the_same_rate_across_frame_rates(self):
         invalid_paths = (
@@ -97,8 +97,9 @@ class SteeringTests(unittest.TestCase):
         for points in invalid_paths:
             for fps in (10 , 20 , 60):
                 with self.subTest(points = points , fps = fps):
-                    value = self.trajectory(points , fps = fps , seconds = 0.1 , previous = 0.18)[-1]
-                    self.assertAlmostEqual(value , 0.18 - steering_module.return_rate * 0.1)
+                    value = self.trajectory(points , fps = fps , seconds = 0.3 , previous = 0.18)[-1]
+                    # The hold expires partway through a frame at some rates.
+                    self.assertAlmostEqual(value , 0.18 - steering_module.return_rate * (0.3 - steering_module.lane_hold_time))
 
     def test_invalid_gains_preserve_the_return_clock(self):
         for gain in (0 , -1 , float("nan") , float("inf")):
@@ -136,11 +137,16 @@ class SteeringTests(unittest.TestCase):
         fresh = self.step(points , previous)
         self.assertAlmostEqual(recovered , fresh)
 
-    def test_path_switch_returns_toward_neutral_without_derivative_spike(self):
+    def test_isolated_path_switch_holds_without_derivative_spike(self):
         previous = self.trajectory([[340 , 220] , [340 , 320]])[-1]
         switched = self.step([[500 , 220] , [500 , 320]] , previous)
-        self.assertLess(abs(switched) , abs(previous))
+        self.assertEqual(switched , previous)
         self.assertEqual(Steering._offset_rate , 0)
+        self.assertEqual(Steering.diagnostics["status"] , "path_jump")
+        recovered = self.step([[340 , 220] , [340 , 320]] , switched)
+        self.assertAlmostEqual(recovered , previous , places = 5)
+        self.assertEqual(Steering.diagnostics["status"] , "tracking")
+        self.assertIsNone(Steering._pending_since)
 
     def test_constant_path_rate_limits_are_consistent_across_frame_rates(self):
         # Start with an already observed path, so this measures the output clock
@@ -218,11 +224,134 @@ class SteeringTests(unittest.TestCase):
         self.assertLess(previews[0] , previews[1])
         self.assertLessEqual(previews[1] , previews[2])
 
-    def test_missing_requested_near_endpoint_returns_to_neutral(self):
+    def test_missing_requested_near_endpoint_holds_then_returns_to_neutral(self):
         Steering.steering([[320 , 188] , [320 , 292]] , 188 , 3 , 0 , timestamp = 1 , y_near = 292)
         value = Steering.steering([[350 , 188] , [350 , 284]] , 188 , 3 , 0.1 , timestamp = 1.1 , y_near = 292)
-        self.assertAlmostEqual(value , 0.05)
+        self.assertAlmostEqual(value , 0.1)
+        self.assertEqual(Steering.diagnostics["status"] , "held")
         self.assertIsNone(Steering._prev_offset)
+        for i in range(2 , 6):
+            value = Steering.steering([[350 , 188] , [350 , 284]] , 188 , 3 , value , timestamp = 1 + i / 10 , y_near = 292)
+        self.assertEqual(value , 0)
+        self.assertEqual(Steering.diagnostics["status"] , "missing")
+
+    def test_high_speed_offset_keeps_useful_correction_authority(self):
+        for speed , minimum in ((60 , 0.05) , (80 , 0.04) , (100 , 0.035) , (110 , 0.03)):
+            with self.subTest(speed = speed):
+                Steering.reset()
+                previous = 0
+                for i in range(30):
+                    previous = Steering.steering([[360 , 240] , [360 , 320]] , 240 , 3 , previous ,
+                                                 speed_kmh = speed , timestamp = i / 12 , y_near = 320)
+                # Regression: a persistent 40px offset produced only 0.014 at 100 km/h.
+                self.assertGreater(previous , minimum)
+                self.assertLess(previous , 0.08)
+                self.assertFalse(Steering.diagnostics["saturated"])
+
+    def test_one_missing_frame_does_not_erase_a_small_turn(self):
+        previous = self.trajectory([[340 , 220] , [340 , 320]])[-1]
+        value = self.step([] , previous , dt = 1 / 12)
+        self.assertGreater(previous , 0)
+        self.assertEqual(value , previous)
+        self.assertEqual(Steering.diagnostics["status"] , "held")
+        for _ in range(12):
+            value = self.step([] , value , dt = 1 / 12)
+        self.assertEqual(value , 0)
+        self.assertFalse(Steering.diagnostics["holding"])
+
+    def test_small_offsets_are_not_amplified_like_large_corrections(self):
+        for direction in (-1 , 1):
+            Steering.reset()
+            previous = 0
+            for i in range(30):
+                x = 320 + direction * 4
+                previous = Steering.steering([[x , 240] , [x , 320]] , 240 , 3 , previous ,
+                                             speed_kmh = 80 , timestamp = i / 12 , y_near = 320)
+            self.assertGreater(previous * direction , 0)
+            self.assertLess(abs(previous) , 0.002)
+            self.assertEqual(Steering.diagnostics["correction_boost"] , 0)
+
+    def test_high_speed_hold_is_shortened_and_does_not_restart(self):
+        previous = 0
+        for i in range(20):
+            previous = Steering.steering([[400 , 240] , [400 , 320]] , 240 , 3 , previous ,
+                                         speed_kmh = 110 , timestamp = i / 12 , y_near = 320)
+        self.assertLessEqual(Steering.diagnostics["hold_duration_s"] * 110 / 3.6 , 3)
+        held = Steering.steering([] , 240 , 3 , previous , speed_kmh = 110 , timestamp = 20 / 12 , y_near = 320)
+        self.assertEqual(held , previous)
+        decayed = Steering.steering([] , 240 , 3 , held , speed_kmh = 110 , timestamp = 21 / 12 , y_near = 320)
+        self.assertLess(decayed , held)
+        self.assertEqual(Steering.diagnostics["status"] , "missing")
+
+    def test_no_hold_before_valid_path_or_after_long_gap(self):
+        value = self.step([] , previous = 0.1)
+        self.assertAlmostEqual(value , 0.05)
+        previous = self.trajectory([[360 , 220] , [360 , 320]])[-1]
+        value = self.step([] , previous , dt = 1)
+        self.assertLess(value , previous)
+        self.assertFalse(Steering.diagnostics["holding"])
+
+    def test_persistent_path_switch_is_accepted_at_multiple_frame_rates(self):
+        for fps in (8 , 12 , 60):
+            with self.subTest(fps = fps):
+                previous = self.trajectory([[340 , 220] , [340 , 320]] , fps = fps)[-1]
+                initial = previous
+                accepted = False
+                for _ in range(math.ceil(0.4 * fps)):
+                    value = self.step([[500 , 220] , [500 , 320]] , previous , dt = 1 / fps)
+                    self.assertLessEqual(abs(value - previous) , steering_module.return_rate / fps + 1e-9)
+                    accepted |= Steering.diagnostics.get("path_reacquired" , False)
+                    previous = value
+                self.assertTrue(accepted)
+                self.assertGreater(previous , initial)
+                self.assertEqual(Steering.diagnostics["status"] , "tracking")
+
+    def test_inconsistent_path_switches_expire_instead_of_extending_hold(self):
+        previous = self.trajectory([[340 , 220] , [340 , 320]])[-1]
+        for x in (80 , 560) * 10:
+            previous = self.step([[x , 220] , [x , 320]] , previous , dt = 1 / 12)
+            self.assertEqual(Steering.diagnostics["status"] , "path_jump")
+        self.assertEqual(previous , 0)
+        self.assertFalse(Steering.diagnostics["holding"])
+
+    def test_nonfinite_speed_uses_fallback_and_bad_clock_clears_hold(self):
+        points = [[360 , 240] , [360 , 320]]
+        for speed in (None , float("nan") , float("inf")):
+            with self.subTest(speed = speed):
+                Steering.reset()
+                value = Steering.steering(points , 240 , 3 , 0 , speed_kmh = speed , timestamp = 1 , y_near = 320)
+                self.assertTrue(math.isfinite(value))
+                self.assertTrue(Steering.diagnostics["speed_fallback"])
+                value = Steering.steering(points , 240 , 3 , value , timestamp = float("nan") , y_near = 320)
+                self.assertEqual(value , 0)
+                self.assertIsNone(Steering._hold_until)
+
+    def test_curved_road_feedback_with_actuator_lag_and_dropouts(self):
+        # Uncalibrated camera + bicycle model: verify sustained bends and actuator lag,
+        # not just a fixed image error or an instantaneous straight-road actuator.
+        for fps in (8 , 12 , 60):
+            for speed in (45 , 80 , 110):
+                for curvature in (-0.003 , 0.003):
+                    with self.subTest(fps = fps , speed = speed , curvature = curvature):
+                        Steering.reset()
+                        lateral , heading , previous , wheel = 0.6 , 0.03 , 0.0 , 0.0
+                        errors = []
+                        dt = 1 / fps
+                        for i in range(25 * fps):
+                            points = [[320 + 320 * (curvature * depth / 2 - lateral / depth - heading) , y]
+                                      for depth , y in ((25 , 240) , (8 , 320))]
+                            # One frame missing every two seconds, at each frame rate.
+                            if i and i % (2 * fps) == 0:
+                                points = []
+                            previous = Steering.steering(points , 240 , 3 , previous , speed_kmh = speed ,
+                                                         timestamp = i * dt , y_near = 320)
+                            wheel += (1 - math.exp(-dt / 0.15)) * (previous * 0.65 - wheel)
+                            heading += speed / 3.6 * (math.tan(wheel) / 5 - curvature) * dt
+                            lateral += speed / 3.6 * math.sin(heading) * dt
+                            errors.append(lateral)
+                        # The old controller drifted beyond 3m at 110 km/h in this model.
+                        self.assertLess(max(abs(e) for e in errors[-5 * fps:]) , 0.9)
+                        self.assertLess(max(abs(e) for e in errors) , 1.5)
 
     def test_capture_timestamp_is_used_instead_of_processing_completion(self):
         points = [[400 , 188] , [400 , 292]]

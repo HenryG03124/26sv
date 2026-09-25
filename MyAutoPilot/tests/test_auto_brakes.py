@@ -67,11 +67,11 @@ class AutoBrakesTests(unittest.TestCase):
         self.assertEqual(self.step(0 , [100 , 250 , 200 , 320] , direction = "right") , 1)
 
     def test_near_car_requires_confirmation(self):
-        box = [290 , 250 , 350 , 300]
+        box = [290 , 249 , 350 , 289]
         self.assertEqual(self.step(0 , box) , 0)
-        self.assertEqual(self.step(0.1 , box) , 0)
+        self.assertEqual(self.step(0.05 , box) , 0)
         self.assertEqual(self.brakes.reason , "none")
-        self.assertEqual(self.step(0.2 , box) , 0.4)
+        self.assertEqual(self.step(0.1 , box) , 0.4)
         self.assertEqual(self.brakes.reason , "near")
 
     def test_emergency_car_beyond_y_near_brakes_immediately(self):

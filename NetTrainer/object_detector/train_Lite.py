@@ -7,7 +7,7 @@ import torch.utils.data as tud
 from pathlib import Path
 from Models.od_Lite import ResNet
 
-from MyImageIdentifier.object_detector.bdd_objdetect_ds import BDDDetectionDataset, detection_collate_fn
+from NetTrainer.object_detector.bdd_objdetect_ds import BDDDetectionDataset, detection_collate_fn
 
 DATASETS_DIR = Path(__file__).resolve().parent.parent / "datasets"
 

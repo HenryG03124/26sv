@@ -3,16 +3,16 @@ import numpy as np
 history_time = 0.6 #seconds
 max_history_gap = 0.5 #seconds, same expiry as MovDetector
 min_history_time = 0.2 #seconds
-confirm_time = 0.15 #seconds
+confirm_time = 0.10 #seconds
 release_time = 0.4 #seconds
 lane_hold_time = 0.5 #seconds
 overlap_threshold = 0.25
 min_height_growth = 0.03
-ttc_brake = 3.0 #seconds
-ttc_full_brake = 1.2 #seconds
-near_y_ratio = 0.84
-near_height_ratio = 0.12
-emergency_y_ratio = 0.90
+ttc_brake = 3.5 #seconds
+ttc_full_brake = 1.5 #seconds
+near_y_ratio = 0.82
+near_height_ratio = 0.11
+emergency_y_ratio = 0.80
 emergency_height_ratio = 0.16
 
 class AutoBrakes():
@@ -48,10 +48,10 @@ class AutoBrakes():
             return float(np.interp(y , points[: , 1] , points[: , 0]))
 
         # Extend only the near end, using a short segment instead of the full polynomial.
-        near_points_far = points[points[: , 1] >= points[-1 , 1] - 24]
-        if len(near_points_far) < 2:
-            near_points_far = points[-2 : ]
-        slope = (near_points_far[-1 , 0] - near_points_far[0 , 0]) / (near_points_far[-1 , 1] - near_points_far[0 , 1])
+        nearby_points_far = points[points[: , 1] >= points[-1 , 1] - 24]
+        if len(nearby_points_far) < 2:
+            nearby_points_far = points[-2 : ]
+        slope = (nearby_points_far[-1 , 0] - nearby_points_far[0 , 0]) / (nearby_points_far[-1 , 1] - nearby_points_far[0 , 1])
         return float(np.clip(points[-1 , 0] + slope * (y - points[-1 , 1]) , 0 , width - 1))
 
     def in_lane(self , box , height , width):
@@ -100,7 +100,7 @@ class AutoBrakes():
             if tracking["status"] != "tracked":
                 continue
 
-            box = tracking["box"]
+            box = tracking["box"] #x1 , y1 , x2 , y2
             box_height = box[3] - box[1]
             history = self.histories.get(track_id , [])
             if history and timestamp - history[-1][0] > max_history_gap:

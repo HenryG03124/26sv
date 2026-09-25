@@ -10,10 +10,11 @@ class LaneRefiner():
     def __init__(self , y_far , y_near , lane_x_diff):
         self.lane_center = width // 2
         self.avalible_points = {"L" : 0 , "R" : 0}
-        self.status = {"L" : "tracking" , "R" : "tracking"}
+        self.status = {"L" : "tracking" , "R" : "tracking" , "center" : "acc"}
         self.y_far = y_far
         self.y_near = y_near
         self.lane_x_diff = lane_x_diff
+        self.prev_lane_width = []
 
     def calculate_slope(self , points):
         slope = 0
@@ -24,6 +25,12 @@ class LaneRefiner():
         
         slope /= (len(points) - 1)
         return slope
+
+    def update_lane_width(self , llane_points , rlane_points):
+        llane_yxdict = {y : x for x , y in llane_points}
+        rlane_yxdict = {y : x for x , y in rlane_points}
+        common_y_values = sorted(llane_yxdict.keys() & rlane_yxdict.keys() , reverse = True)
+        self.prev_lane_width = [[rlane_yxdict[y] - llane_yxdict[y] , y] for y in common_y_values]
 
     def initialize_sampling(self , points , sides , min_support_rows = 4 , init_x_diff = 4 , min_y_diff = 12):
         if len(points) < min_support_rows:
@@ -149,19 +156,7 @@ class LaneRefiner():
         self.status[sides] = "tracking"
         return lane_points
 
-    def calculate_center_points(self , llane_points , rlane_points):
-        if not llane_points or not rlane_points:
-            return []
-
-        llane_yxdict = {y : x for x , y in llane_points}
-        rlane_yxdict = {y : x for x , y in rlane_points}
-        common_y_values = sorted(llane_yxdict.keys() & rlane_yxdict.keys() , reverse = True)
-        center_points = [[(llane_yxdict[y] + rlane_yxdict[y]) // 2 , y] for y in common_y_values]
-
-        return center_points
-
     def refine(self , mask , degree , sgl_lane_px_offset , return_sample = False):
-        """Return left and right lane points, optionally preceded by both samples."""
         height , width = mask.shape
         llane_sample_points , rlane_sample_points = self.sample_lane_points(mask , sgl_lane_px_offset , 4)
 
@@ -172,3 +167,29 @@ class LaneRefiner():
             return llane_sample_points , rlane_sample_points , llane_points , rlane_points
         else:
             return llane_points , rlane_points
+
+    def calculate_center_points(self , llane_points , rlane_points):
+        if not llane_points and not rlane_points:
+            self.status["center"] = "missing"
+            return []
+        elif not llane_points:
+            rlane_yxdict = {y : x for x , y in rlane_points}
+            prev_lane_width_yxdict = {y : x for x , y in self.prev_lane_width}
+            common_y_values = sorted(prev_lane_width_yxdict.keys() & rlane_yxdict.keys() , reverse = True)
+            center_points = [[(2 * rlane_yxdict[y] - prev_lane_width_yxdict[y]) // 2 , y] for y in common_y_values]
+            self.status["center"] = "perdicted" if center_points else "missing"
+        elif not rlane_points:
+            llane_yxdict = {y : x for x , y in llane_points}
+            prev_lane_width_yxdict = {y : x for x , y in self.prev_lane_width}
+            common_y_values = sorted(prev_lane_width_yxdict.keys() & llane_yxdict.keys() , reverse = True)
+            center_points = [[(2 * llane_yxdict[y] + prev_lane_width_yxdict[y]) // 2 , y] for y in common_y_values]
+            self.status["center"] = "predicted" if center_points else "missing"
+        else:
+            llane_yxdict = {y : x for x , y in llane_points}
+            rlane_yxdict = {y : x for x , y in rlane_points}
+            common_y_values = sorted(llane_yxdict.keys() & rlane_yxdict.keys() , reverse = True)
+            center_points = [[(llane_yxdict[y] + rlane_yxdict[y]) // 2 , y] for y in common_y_values]
+            self.update_lane_width(llane_points , rlane_points)
+            self.status["center"] = "accurate" if center_points else "missing"
+
+        return center_points

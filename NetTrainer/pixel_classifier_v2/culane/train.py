@@ -11,8 +11,8 @@ from Models.pc_v2 import UNet
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATASETS_DIR = SCRIPT_DIR.parent.parent / "datasets"
 
-from MyImageIdentifier.pixel_classifier_v2.bdd100k.pc_v2_bdd100k_ds import BDDLaneDataset
-from MyImageIdentifier.pixel_classifier_v2.culane.pc_v2_culane_ds import CULaneDataset
+from NetTrainer.pixel_classifier_v2.bdd100k.pc_v2_bdd100k_ds import BDDLaneDataset
+from NetTrainer.pixel_classifier_v2.culane.pc_v2_culane_ds import CULaneDataset
 
 road_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds/train_pairs.csv")
 road_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds/val_pairs.csv")

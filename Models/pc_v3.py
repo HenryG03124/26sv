@@ -1,4 +1,9 @@
-#Road/car and lane segmentation network shared by all V2 entry points.
+"""V3: shared RGB features for road, lane and steering regression.
+
+``model(images)`` returns shared features, as in V2. Use
+``model(images, task="steering")`` for a (batch, 1) steering tensor.
+Steering follows the SCS SDK convention: [-1, 1], positive = left.
+"""
 
 import torch
 import torch.nn as nn
@@ -130,7 +135,24 @@ class UNet(nn.Module):
             nn.ReLU(inplace = True)
         )
 
-    def forward(self , x):
+        # Preserve spatial position: a global average alone loses left/right
+        # geometry. This head consumes only features extracted from the RGB.
+        self.steering_head = nn.Sequential(
+            nn.Conv2d(32 , 64 , kernel_size = 3 , stride = 2 , padding = 1) ,
+            nn.ReLU(inplace = True) ,
+            nn.Conv2d(64 , 64 , kernel_size = 3 , stride = 2 , padding = 1) ,
+            nn.ReLU(inplace = True) ,
+            nn.AdaptiveAvgPool2d((4 , 8)) ,
+            nn.Flatten() ,
+            nn.Linear(64 * 4 * 8 , 128) ,
+            nn.ReLU(inplace = True) ,
+            nn.Linear(128 , 1) ,
+            nn.Tanh()
+        )
+
+    def forward(self , x , task = None):
+        if task not in (None , "road" , "lane" , "steering"):
+            raise ValueError(f"Unknown task: {task}")
         root = self.root(x) #320 * 176 ch = 64
 
         encoder1 = self.pool(root) #160 * 88 ch = 64
@@ -157,13 +179,16 @@ class UNet(nn.Module):
         decoder1 = torch.cat((decoder1 , root) , dim = 1) #320 * 176 ch = 96
         decoder1 = self.decoder1(decoder1) #320 * 176 ch = 32
 
-        return decoder1
+        return decoder1 if task is None else self.head(x , decoder1 , task)
 
     def head(self , x , decoder1 , task):
         if task == "road":
             return self.road_head(decoder1) #640 * 352 ch = 3
-        else:
+        elif task == "lane":
             lane_semantic = self.lane_up(decoder1) #640 * 352 ch = 16 processed
             lane_detail = self.lane_detail(x) #640 * 352 ch = 8 unprocessed
             lane_feature = torch.cat((lane_semantic , lane_detail) , dim = 1) #640 * 352 ch = 24
             return self.lane_head(lane_feature) #640 * 352 ch = 2
+        elif task == "steering":
+            return self.steering_head(decoder1) # [batch , 1] , SDK normalized steering
+        raise ValueError(f"Unknown task: {task}")

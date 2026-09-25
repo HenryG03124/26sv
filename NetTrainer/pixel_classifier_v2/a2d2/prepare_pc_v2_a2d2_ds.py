@@ -161,8 +161,8 @@ def prepare_dataset(source_root , raw_root , output_root , watch = False):
 def main():
     parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument("--source-root" , type = Path , default = Path(r"C:\Downloads\A2D2"))
-    parser.add_argument("--raw-root" , type = Path , default = DATASETS_DIR / "pc_lane_A2D2_ds")
-    parser.add_argument("--output-root" , type = Path , default = DATASETS_DIR / "processed_pc_lane_A2D2_ds")
+    parser.add_argument("--raw-root" , type = Path , default = DATASETS_DIR / "pc_lane_ds_a2d2")
+    parser.add_argument("--output-root" , type = Path , default = DATASETS_DIR / "processed_pc_lane_ds_a2d2")
     parser.add_argument("--watch" , action = "store_true")
     args = parser.parse_args()
     prepare_dataset(args.source_root.resolve() , args.raw_root.resolve() , args.output_root.resolve() , args.watch)

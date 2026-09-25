@@ -11,12 +11,12 @@ from Models.pc_v2 import UNet
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATASETS_DIR = SCRIPT_DIR.parent.parent / "datasets"
 
-from MyImageIdentifier.pixel_classifier_v2.a2d2.pc_v2_a2d2_ds import A2D2Dataset
+from NetTrainer.pixel_classifier_v2.a2d2.pc_v2_a2d2_ds import A2D2Dataset
 
-road_train_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_A2D2_ds/train_pairs.csv" , task = "road")
-road_val_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_A2D2_ds/val_pairs.csv" , task = "road")
-lane_train_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_A2D2_ds/train_pairs.csv" , task = "lane")
-lane_val_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_A2D2_ds/val_pairs.csv" , task = "lane")
+road_train_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_ds_a2d2/train_pairs.csv" , task = "road")
+road_val_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_ds_a2d2/val_pairs.csv" , task = "road")
+lane_train_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_ds_a2d2/train_pairs.csv" , task = "lane")
+lane_val_dataset = A2D2Dataset(DATASETS_DIR / "processed_pc_lane_ds_a2d2/val_pairs.csv" , task = "lane")
 
 batch_size = 16
 road_train_loader = tud.DataLoader(road_train_dataset , batch_size = batch_size , shuffle = True)

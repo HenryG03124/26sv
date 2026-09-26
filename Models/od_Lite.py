@@ -1,4 +1,4 @@
-#Lite detection network; numeric Sequential keys preserve existing checkpoints.
+#Lite detection network for pedestrian , car , truck.
 
 import torch.nn as nn
 
@@ -58,6 +58,6 @@ class ResNet(nn.Sequential):
             nn.BatchNorm2d(256) ,
             nn.ReLU(inplace = True) ,
 
-            nn.Conv2d(256 , 7 , kernel_size = 1 , stride = 1)
+            nn.Conv2d(256 , 8 , kernel_size = 1 , stride = 1) #box: 4 , objectness: 1 , classes: 3
         )
         super().__init__(ResNet18_encoder , detector)

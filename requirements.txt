@@ -6,6 +6,7 @@ torch
 vgamepad
 
 # Dataset preparation, training, and visualization
+torchvision
 matplotlib
 pandas
 Pillow

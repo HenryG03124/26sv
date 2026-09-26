@@ -15,7 +15,7 @@ from logger import Logger
 from scs_telemetry import SCSTelemetry
 
 pc_colors = np.array([[0 , 0 , 0] , [0 , 255 , 0] , [0 , 0 , 255] , [0 , 255 , 255]] , dtype = np.uint8)
-od_colors = ((255 , 64 , 64) , (64 , 128 , 255))
+od_colors = ((255 , 64 , 64) , (64 , 128 , 255) , (64 , 192 , 255))
 
 alpha = 0.3
 car_mask_ratio_threshold = 0.5
@@ -31,10 +31,10 @@ y_far = 220 #px(188)
 y_near = 320 #px(292)
 K_steering = 3
 
-capture_fullscreen = False #True: full monitor , False: window client area
+capture_fullscreen = True #True: full monitor , False: window client area
 monitor_index = 1
 window_name = "Euro Truck Simulator 2"
-scale = 1
+scale = 2
 
 pixel_classifier_dataset = "bdd100k" #bdd100k / a2d2 / culane
 control = "enable"

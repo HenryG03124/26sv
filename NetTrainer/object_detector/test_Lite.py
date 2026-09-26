@@ -38,10 +38,10 @@ def non_maximum_suppression(boxes , scores , labels , threshold):
 
     return torch.tensor(kept , dtype = torch.int64)
 
-class_names = ("pedestrian" , "car")
-colors = ((255 , 64 , 64) , (64 , 128 , 255))
-grid_height = 16
-grid_width = 28
+class_names = ("pedestrian" , "car" , "truck")
+colors = ((255 , 64 , 64) , (64 , 128 , 255) , (255 , 192 , 64))
+grid_height = 22
+grid_width = 40
 confidence_threshold = 0.5
 nms_threshold = 0.35
 
@@ -50,7 +50,7 @@ model.eval()
 
 image = Image.open("test.jpg").convert("RGB")
 original_width , original_height = image.size
-resized_image = image.resize((448 , 256) , Image.Resampling.BILINEAR)
+resized_image = image.resize((640 , 352) , Image.Resampling.BILINEAR)
 image_array = np.array(resized_image , dtype = np.uint8 , copy = True)
 image_tensor = torch.from_numpy(image_array).permute(2 , 0 , 1).float().div(255.0)
 image_tensor = image_tensor.unsqueeze(0).to(device)

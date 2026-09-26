@@ -6,15 +6,15 @@ from Models.od_Lite import ResNet
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
-grid_height = 16
-grid_width = 28
+grid_height = 22
+grid_width = 40
 confidence_threshold = 0.65
 nms_threshold = 0.35
 car_mask_class_id = 2
 car_label_id = 1
 
 class ObjectDetectorLite():
-    class_names = ("pedestrian" , "car")
+    class_names = ("pedestrian" , "car" , "truck")
 
     def __init__(self):
         self.model = ResNet().to(device)
@@ -24,7 +24,7 @@ class ObjectDetectorLite():
         self.model.eval()
 
     def preprocess(self , frame):
-        model_input = cv2.resize(frame , (448 , 256) , interpolation = cv2.INTER_LINEAR)
+        model_input = cv2.resize(frame , (640 , 352) , interpolation = cv2.INTER_LINEAR)
         model_input = cv2.cvtColor(model_input , cv2.COLOR_BGR2RGB)
         model_input = torch.from_numpy(model_input).permute(2 , 0 , 1).contiguous().to(dtype = torch.float32).div(255.0).unsqueeze(0).to(device)
         return model_input

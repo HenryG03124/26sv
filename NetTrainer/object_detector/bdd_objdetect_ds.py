@@ -1,4 +1,4 @@
-"""BDD100K detection inputs with the same image preprocessing as the ResNet project."""
+"""BDD100K detection inputs at the same resolution as PC V2."""
 from __future__ import annotations
 
 import csv
@@ -11,8 +11,8 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
-TARGET_HEIGHT = 256
-TARGET_WIDTH = 448
+TARGET_HEIGHT = 352
+TARGET_WIDTH = 640
 # 0 is reserved for a detector's background class; annotation IDs are 1..10.
 CLASS_NAMES = (
     'person', 'rider', 'car', 'truck', 'bus', 'train',
@@ -31,11 +31,11 @@ class DetectionRecord:
 
 
 class BDDDetectionDataset(Dataset):
-    """Return image (3,256,448) and a variable-length detection target.
+    """Return image (3 , 352 , 640) and a variable-length detection target.
 
     Images are RGB float32 in [0,1], resized with PIL bilinear interpolation,
-    exactly as in BDDVehicleRoadDataset. Boxes are float32 XYXY coordinates in
-    the resized 448x256 image, not normalized coordinates. Labels are int64,
+    at the same resolution as PC V2. Boxes are float32 XYXY coordinates in
+    the resized 640x352 image, not normalized coordinates. Labels are int64,
     with 0 reserved for background and object IDs 1..10.
     """
 

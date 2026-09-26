@@ -2,6 +2,7 @@ import numpy as np
 
 car_label_id = 1
 pedestrian_label_id = 0
+truck_label_id = 2
 max_missing_time = 0.5 #seconds
 max_center_diff = 10 #px
 
@@ -36,7 +37,7 @@ class MovDetector():
         boxes = np.asarray(boxes , dtype = np.float64).reshape(-1 , 4)
         scores = np.asarray(scores)
         labels = np.asarray(labels)
-        selected = (labels == car_label_id) | (labels == pedestrian_label_id)
+        selected = (labels == car_label_id) | (labels == pedestrian_label_id) | (labels == truck_label_id)
         boxes , scores , labels = boxes[selected] , scores[selected] , labels[selected]
         centers = (boxes[: , : 2] + boxes[: , 2 :]) / 2
 

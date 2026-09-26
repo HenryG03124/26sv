@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.utils.data as tud
+from torchvision.ops import complete_box_iou_loss , nms , sigmoid_focal_loss
 from pathlib import Path
 from Models.od_Lite import ResNet
 
@@ -14,7 +15,7 @@ DATASETS_DIR = Path(__file__).resolve().parent.parent / "datasets"
 full_train_dataset = BDDDetectionDataset(DATASETS_DIR / "processed_objdetect_ds/train_pairs.csv")
 val_dataset = BDDDetectionDataset(DATASETS_DIR / "processed_objdetect_ds/val_pairs.csv")
 
-train_sample_size = min(30000 , len(full_train_dataset))
+train_sample_size = min(50000 , len(full_train_dataset))
 sample_generator = torch.Generator().manual_seed(42)
 train_indices = torch.randperm(len(full_train_dataset) , generator = sample_generator)[ : train_sample_size].tolist()
 train_dataset = tud.Subset(full_train_dataset , train_indices)
@@ -26,173 +27,111 @@ device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is
 
 model = ResNet().to(device)
 
-class_names = ("pedestrian" , "car")
-input_height = 256
-input_width = 448
-grid_height = 16
-grid_width = 28
-number_of_classes = 2
+class_names = ("pedestrian" , "car" , "truck")
+input_height = 352
+input_width = 640
+grid_height = 22
+grid_width = 40
+number_of_classes = 3
 box_loss_weight = 5.0
 
-# BDDDetectionDataset IDs: person = 1, car = 3.
 pedestrian_label_id = 1
 car_label_id = 3
-class_weights = torch.tensor([1.0 , 0.30] , dtype = torch.float32 , device = device) #person , car
-class_criterion = nn.CrossEntropyLoss(weight = class_weights)
-obj_criterion = nn.BCEWithLogitsLoss(pos_weight = torch.tensor([10.0], device = device))
-box_criterion = nn.SmoothL1Loss()
+truck_label_id = 4
+class_weights = torch.tensor([1.0 , 0.30 , 1.0] , dtype = torch.float32 , device = device) #person , car , truck
+class_criterion = nn.CrossEntropyLoss(weight = class_weights , label_smoothing = 0.05)
 optimizer = torch.optim.Adam(model.parameters() , lr = 0.001)
 print("current device:" , device)
 print("training samples:" , len(train_dataset))
 
 def build_targets(targets):
     batch_size = len(targets)
-    class_targets = torch.full((batch_size , grid_height , grid_width) , -1 , dtype = torch.int64)
-    box_targets = torch.zeros((batch_size , 4 , grid_height , grid_width) , dtype = torch.float32)
+    class_targets = torch.full((batch_size , grid_height , grid_width) , -1 , dtype = torch.int64) #[B , 22 , 40]
+    box_targets = torch.zeros((batch_size , 4 , grid_height , grid_width) , dtype = torch.float32) #[B , 4 , 22 , 40]
+    label_ids = (pedestrian_label_id , car_label_id , truck_label_id)
+    scale = torch.tensor([grid_width / input_width , grid_height / input_height] , dtype = torch.float32)
 
     for image_id , target in enumerate(targets):
-        boxes = target["boxes"]
         labels = target["labels"]
-        selected = (labels == pedestrian_label_id) | (labels == car_label_id)
-        boxes = boxes[selected]
+        selected = (labels == pedestrian_label_id) | (labels == car_label_id) | (labels == truck_label_id)
+        boxes = target["boxes"][selected] * scale.repeat(2)
         labels = labels[selected]
+        centers = (boxes[: , :2] + boxes[: , 2:]) / 2
+        sizes = boxes[: , 2:] - boxes[: , :2]
+        cells = centers.floor().long()
+        cells[: , 0].clamp_(0 , grid_width - 1)
+        cells[: , 1].clamp_(0 , grid_height - 1)
 
-        if len(boxes) == 0:
-            continue
-
-        centers_x = (boxes[: , 0] + boxes[: , 2]) / 2
-        centers_y = (boxes[: , 1] + boxes[: , 3]) / 2
-        widths = boxes[: , 2] - boxes[: , 0]
-        heights = boxes[: , 3] - boxes[: , 1]
-        grid_x = centers_x / input_width * grid_width
-        grid_y = centers_y / input_height * grid_height
-        cell_x = grid_x.floor().long().clamp(0 , grid_width - 1)
-        cell_y = grid_y.floor().long().clamp(0 , grid_height - 1)
-        areas = widths * heights
-        order = torch.argsort(areas)
-
-        for object_id in order.tolist():
-            x = cell_x[object_id].item()
-            y = cell_y[object_id].item()
-            class_targets[image_id , y , x] = (labels[object_id] == car_label_id).long()
-            box_targets[image_id , 0 , y , x] = grid_x[object_id] - cell_x[object_id].float()
-            box_targets[image_id , 1 , y , x] = grid_y[object_id] - cell_y[object_id].float()
-            box_targets[image_id , 2 , y , x] = torch.log((widths[object_id] / input_width * grid_width).clamp(min = 1e-6))
-            box_targets[image_id , 3 , y , x] = torch.log((heights[object_id] / input_height * grid_height).clamp(min = 1e-6))
+        # Keep the largest object when centers share a cell.
+        for object_id in torch.argsort(sizes.prod(dim = 1)).tolist():
+            x , y = cells[object_id].tolist()
+            class_targets[image_id , y , x] = label_ids.index(labels[object_id].item())
+            box_targets[image_id , :2 , y , x] = centers[object_id] - cells[object_id].float() #x diff , y diff (in grid)
+            box_targets[image_id , 2: , y , x] = torch.log(sizes[object_id].clamp(min = 1e-6)) #log(w) , log(h) (grid)
 
     return class_targets.to(device) , box_targets.to(device)
 
 def calculate_loss(outputs , targets):
     class_targets , box_targets = build_targets(targets)
-    obj_targets = (class_targets >= 0).float()
-    obj_loss = obj_criterion(outputs[: , 4] , obj_targets)
     positive = class_targets >= 0
+    # RetinaNet focal loss , normalized by foreground cells.
+    obj_loss = sigmoid_focal_loss(outputs[: , 4] , positive.float() , alpha = 0.25 , gamma = 2.0 , reduction = "none")
+    obj_loss = (obj_loss.sum(dim = (1 , 2)) / positive.sum(dim = (1 , 2)).clamp(min = 1)).mean()
+    class_loss = box_loss = outputs.sum() * 0
 
     if positive.any():
-        positive_class_predictions = outputs[: , 5 :].permute(0 , 2 , 3 , 1)[positive] #[B, 2, 16, 28] to [B, 16, 28, 2]
-        positive_class_targets = class_targets[positive]
-        class_loss = class_criterion(positive_class_predictions , positive_class_targets)
-
-        box_predictions = torch.cat((torch.sigmoid(outputs[: , : 2]) , outputs[: , 2 : 4]) , dim = 1).permute(0 , 2 , 3 , 1)
-        positive_box_predictions = box_predictions[positive] #[B, 4, 16, 28] to [B, 16, 28, 4]
-        positive_box_targets = box_targets.permute(0 , 2 , 3 , 1)[positive]
-        box_loss = box_criterion(positive_box_predictions , positive_box_targets)
-    else:
-        class_loss = outputs[: , 5 :].sum() * 0
-        box_loss = outputs[: , : 4].sum() * 0
+        class_predictions = outputs[: , 5:].permute(0 , 2 , 3 , 1)[positive]
+        class_loss = class_criterion(class_predictions , class_targets[positive])
+        predicted = decode_relative_boxes(outputs[: , :4] , prediction = True).permute(0 , 2 , 3 , 1)[positive]
+        expected = decode_relative_boxes(box_targets , prediction = False).permute(0 , 2 , 3 , 1)[positive]
+        # CIoU uses pixel geometry without clipping the predicted boxes.
+        scale = outputs.new_tensor([input_width , input_height , input_width , input_height])
+        box_loss = complete_box_iou_loss(predicted * scale , expected * scale , reduction = "mean")
 
     loss = class_loss + obj_loss + box_loss_weight * box_loss
     return loss , class_targets , box_targets
 
 def decode_relative_boxes(encoded_boxes , prediction):
-    batch_size = encoded_boxes.size(0)
     grid_y , grid_x = torch.meshgrid(
         torch.arange(grid_height , device = encoded_boxes.device , dtype = encoded_boxes.dtype) ,
         torch.arange(grid_width , device = encoded_boxes.device , dtype = encoded_boxes.dtype) ,
         indexing = "ij"
     )
 
-    if prediction:
-        offset_x = torch.sigmoid(encoded_boxes[: , 0])
-        offset_y = torch.sigmoid(encoded_boxes[: , 1])
-        width_in_cells = torch.exp(encoded_boxes[: , 2].clamp(-4.0 , 4.0))
-        height_in_cells = torch.exp(encoded_boxes[: , 3].clamp(-4.0 , 4.0))
-    else:
-        offset_x = encoded_boxes[: , 0]
-        offset_y = encoded_boxes[: , 1]
-        width_in_cells = torch.exp(encoded_boxes[: , 2])
-        height_in_cells = torch.exp(encoded_boxes[: , 3])
-
-    center_x = (grid_x.unsqueeze(0).expand(batch_size , -1 , -1) + offset_x) / grid_width
-    center_y = (grid_y.unsqueeze(0).expand(batch_size , -1 , -1) + offset_y) / grid_height
-    width = width_in_cells / grid_width
-    height = height_in_cells / grid_height
-
-    return torch.stack((
-        center_x - width / 2 ,
-        center_y - height / 2 ,
-        center_x + width / 2 ,
-        center_y + height / 2
-    ) , dim = 1)
+    grid = torch.stack((grid_x , grid_y) , dim = 0)
+    scale = encoded_boxes.new_tensor([grid_width , grid_height]).view(1 , 2 , 1 , 1)
+    offsets = torch.sigmoid(encoded_boxes[: , :2]) if prediction else encoded_boxes[: , :2]
+    sizes = encoded_boxes[: , 2:].clamp(-4.0 , 4.0) if prediction else encoded_boxes[: , 2:]
+    centers = (grid + offsets) / scale
+    half_sizes = torch.exp(sizes) / scale / 2
+    return torch.cat((centers - half_sizes , centers + half_sizes) , dim = 1)
 
 def calculate_iou(outputs , class_targets , box_targets):
-    positive_positions = (class_targets >= 0).nonzero(as_tuple = False)
-
-    if len(positive_positions) == 0:
-        return torch.empty(0 , device = device) , torch.empty(0 , dtype = torch.int64 , device = device)
-
+    positive = class_targets >= 0
     box_predictions = decode_relative_boxes(outputs[: , : 4] , prediction = True).permute(0 , 2 , 3 , 1)
     decoded_box_targets = decode_relative_boxes(box_targets , prediction = False).permute(0 , 2 , 3 , 1)
-    batch_ids = positive_positions[:, 0]
-    predicted = box_predictions[batch_ids , positive_positions[:, 1] , positive_positions[: , 2]]
-    expected = decoded_box_targets[batch_ids , positive_positions[:, 1] , positive_positions[ :, 2]]
+    predicted = box_predictions[positive].clamp(0 , 1)
+    expected = decoded_box_targets[positive].clamp(0 , 1)
+    return calculate_box_iou(predicted , expected) , class_targets[positive]
 
-    predicted_boxes = predicted.clamp(0 , 1)
-    expected_boxes = expected.clamp(0 , 1)
-
-    intersection_x1 = torch.maximum(predicted_boxes[: , 0] , expected_boxes[: , 0])
-    intersection_y1 = torch.maximum(predicted_boxes[: , 1] , expected_boxes[: , 1])
-    intersection_x2 = torch.minimum(predicted_boxes[: , 2] , expected_boxes[: , 2])
-    intersection_y2 = torch.minimum(predicted_boxes[: , 3] , expected_boxes[: , 3])
-    intersection = (intersection_x2 - intersection_x1).clamp(min = 0) * (intersection_y2 - intersection_y1).clamp(min = 0)
-    predicted_area = (predicted_boxes[: , 2] - predicted_boxes[: , 0]) * (predicted_boxes[: , 3] - predicted_boxes[: , 1])
-    expected_area = (expected_boxes[: , 2] - expected_boxes[: , 0]) * (expected_boxes[: , 3] - expected_boxes[: , 1])
-    union = predicted_area + expected_area - intersection
-    iou = intersection / union.clamp(min = 1e-7)
-    labels = class_targets[batch_ids , positive_positions[: , 1] , positive_positions[: , 2]]
-    return iou , labels
-
-def calculate_box_iou(box , boxes): #calcute the iou between one box and the rest boxes
-    intersection_x1 = torch.maximum(box[0] , boxes[: , 0])
-    intersection_y1 = torch.maximum(box[1] , boxes[: , 1])
-    intersection_x2 = torch.minimum(box[2] , boxes[: , 2])
-    intersection_y2 = torch.minimum(box[3] , boxes[: , 3])
-    intersection = (intersection_x2 - intersection_x1).clamp(min = 0) * (intersection_y2 - intersection_y1).clamp(min = 0)
-    box_area = (box[2] - box[0]) * (box[3] - box[1])
-    boxes_area = (boxes[: , 2] - boxes[: , 0]) * (boxes[: , 3] - boxes[: , 1])
-    return intersection / (box_area + boxes_area - intersection).clamp(min = 1e-7)
+def calculate_box_iou(box , boxes): #Aligned boxes or one box against many.
+    first = torch.maximum(box[... , : 2] , boxes[... , : 2])
+    second = torch.minimum(box[..., 2 :] , boxes[... , 2 :])
+    inter = (second - first).clamp(min = 0).prod(dim = -1)
+    area = (box[..., 2 :] - box[..., :2]).prod(dim = -1)
+    areas = (boxes[... , 2 :] - boxes[... , : 2]).prod(dim = -1)
+    union = area + areas - inter
+    return inter / union.clamp(min = 1e-7)
 
 def non_maximum_suppression(boxes , scores , nms_threshold):
-    kept = []
-    order = torch.argsort(scores , descending = True)
-
-    while len(order) > 0:
-        current = order[0]
-        kept.append(current.item())
-
-        if len(order) == 1:
-            break
-
-        remaining = order[1 : ] #throw order[1]
-        iou = calculate_box_iou(boxes[current] , boxes[remaining])
-        order = remaining[iou <= nms_threshold]
-
-    return torch.tensor(kept , dtype = torch.int64 , device = boxes.device)
+    if boxes.device.type == "mps":
+        return nms(boxes.cpu() , scores.cpu() , nms_threshold).to(boxes.device)
+    return nms(boxes , scores , nms_threshold)
 
 def decode_predictions(outputs , score_threshold , nms_threshold):
-    boxes = decode_relative_boxes(outputs[: , :4] , prediction = True).permute(0 , 2 , 3 , 1).clamp(0 , 1)
+    boxes = decode_relative_boxes(outputs[: , : 4] , prediction = True).permute(0 , 2 , 3 , 1).clamp(0 , 1)
     objectness = torch.sigmoid(outputs[: , 4])
-    class_probabilities = torch.softmax(outputs[: , 5:] , dim = 1)
+    class_probabilities = torch.softmax(outputs[: , 5 :] , dim = 1)
     predictions = []
 
     for image_id in range(outputs.size(0)):
@@ -232,10 +171,7 @@ def calculate_detection_metrics(detections , ground_truth_boxes , score_threshol
         return float("nan") , float("nan") , float("nan")
 
     detections.sort(key = lambda detection: detection[0] , reverse = True)
-    matched = {
-        image_id: torch.zeros(len(boxes) , dtype = torch.bool)
-        for image_id , boxes in ground_truth_boxes.items()
-    }
+    matched = {image_id: torch.zeros(len(boxes) , dtype = torch.bool) for image_id , boxes in ground_truth_boxes.items()}
     detection_scores = torch.zeros(len(detections) , dtype = torch.float64)
     true_positive = torch.zeros(len(detections) , dtype = torch.float64)
     false_positive = torch.zeros(len(detections) , dtype = torch.float64)
@@ -354,7 +290,7 @@ with torch.no_grad():
             target_labels = target["labels"]
             predicted_boxes , predicted_scores , predicted_labels = prediction
 
-            for class_id , label_id in enumerate((pedestrian_label_id , car_label_id)):
+            for class_id , label_id in enumerate((pedestrian_label_id , car_label_id , truck_label_id)):
                 selected = target_labels == label_id
 
                 if selected.any():
@@ -368,10 +304,7 @@ with torch.no_grad():
         image_number += len(targets)
 
 avg_val_loss = val_loss / len(val_dataset)
-val_iou = torch.where(
-    val_iou_count > 0 , val_iou_sum / val_iou_count ,
-    torch.tensor(float("nan") , device = device)
-)
+val_iou = torch.where(val_iou_count > 0 , val_iou_sum / val_iou_count ,torch.tensor(float("nan") , device = device))
 val_miou = torch.nanmean(val_iou)
 
 print("\nvalidation loss:" , avg_val_loss)

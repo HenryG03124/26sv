@@ -5,7 +5,7 @@ import time
 from screen_capture import ScreenCapture
 from draw import Draw
 from pixel_classifier_v2 import PixelClassifierV2
-from object_detector import ObjectDetectorLite
+from object_detector import ObjectDetectorLite , device
 from mov_detector import MovDetector
 from lane_refiner import LaneRefiner
 from steering import Steering
@@ -21,22 +21,26 @@ alpha = 0.3
 car_mask_ratio_threshold = 0.5
 lane_prob_threshold = 0.7
 
-sgl_lane_px_offset = 10 #px
+sgl_lane_x_offset = 10 #px
 degree = 2
 lane_x_diff = 10 #px
+min_neighbour_diff = 30 #px
 
 spd = 70 #px / s
 
-y_far = 220 #px(188)
-y_near = 320 #px(292)
+current_y_far = 200 #px(188)
+current_y_near = 320 #px(292)
+neighbour_y_far = 188 #px
+neighbour_y_near = 248 #px
 K_steering = 3
 
-capture_fullscreen = True #True: full monitor , False: window client area
-monitor_index = 1
+capture_fullscreen = False #True: full monitor , False: window client area
+monitor_index = 2
 window_name = "Euro Truck Simulator 2"
-scale = 2
+scale = 1
 
 pixel_classifier_dataset = "bdd100k" #bdd100k / a2d2 / culane
+use_yolo = False #True: pretrained YOLO26n , False: custom Lite detector
 control = "enable"
 
 def main():
@@ -48,11 +52,15 @@ def main():
     classifier = PixelClassifierV2()
     classifier.load_model(f"weights/pc_model_v2_{pixel_classifier_dataset}.pth")
 
-    detector = ObjectDetectorLite()
-    detector.load_model("weights/od_model_Lite.pth")
+    if use_yolo:
+        from ultralytics import YOLO
+        detector = YOLO("weights/yolo26n.pt")
+    else:
+        detector = ObjectDetectorLite()
+        detector.load_model("weights/od_model_Lite.pth")
     mov_detector = MovDetector()
 
-    lane_refiner = LaneRefiner(y_far , y_near , lane_x_diff)
+    lane_refiner = LaneRefiner(current_y_far , current_y_near , lane_x_diff , neighbour_y_far , neighbour_y_near)
     auto_brakes = AutoBrakes()
     input_controller = InputController()
     logger = Logger()
@@ -77,17 +85,26 @@ def main():
 
             mask = classifier.predict(frame , lane_prob_threshold)
 
-            pos , boxes , scores , labels = detector.predict(frame)
-            boxes , scores , labels = detector.box_filter(pos , boxes , scores , labels , mask.shape[1] , mask.shape[0] , mask , car_mask_ratio_threshold)
+            if use_yolo:
+                result = detector.predict(frame , imgsz = 640 , conf = 0.5 , classes = [0 , 2 , 7] , max_det = 100 , device = device , verbose = False)[0]
+                boxes = result.boxes.xyxyn.cpu().numpy() * np.array([mask.shape[1] , mask.shape[0] , mask.shape[1] , mask.shape[0]] , dtype = np.float32)
+                scores = result.boxes.conf.cpu().numpy()
+                labels = result.boxes.cls.cpu().numpy().astype(np.int64)
+                # COCO person/car/truck: 0/2/7 -> 0/1/2.
+                labels[labels == 2] = 1
+                labels[labels == 7] = 2
+            else:
+                pos , boxes , scores , labels = detector.predict(frame)
+                boxes , scores , labels = detector.box_filter(pos , boxes , scores , labels , mask.shape[1] , mask.shape[0] , mask , car_mask_ratio_threshold)
             trackings = mov_detector.update(boxes , scores , labels , timestamp , spd)
 
-            llane_sample_points , rlane_sample_points , llane_points , rlane_points = lane_refiner.refine(mask , degree , sgl_lane_px_offset , return_sample = True)
-            center_points = lane_refiner.calculate_center_points(llane_points , rlane_points)
+            cl_lane_sample_points , cr_lane_sample_points , nl_lane_sample_points , nr_lane_sample_points , cl_lane_points , cr_lane_points , nl_lane_points , nr_lane_points = lane_refiner.refine(mask , degree , sgl_lane_x_offset , min_neighbour_diff , return_sample = True)
+            center_points = lane_refiner.calculate_center_points(cl_lane_points , cr_lane_points)
 
             current_lane_mask = np.zeros_like(mask , dtype = np.uint8)
 
-            if len(llane_points) >= 3 and len(rlane_points) >= 3:
-                polygon = np.array(llane_points + rlane_points[ : : -1] ,dtype = np.int32)
+            if len(cl_lane_points) >= 3 and len(cr_lane_points) >= 3:
+                polygon = np.array(cl_lane_points + cr_lane_points[ : : -1] ,dtype = np.int32)
                 cv2.fillPoly(current_lane_mask , [polygon] , color = 1)
 
             display_frame = cv2.resize(frame , (mask.shape[1] , mask.shape[0]) , interpolation = cv2.INTER_LINEAR)
@@ -96,18 +113,16 @@ def main():
             blended = cv2.addWeighted(display_frame , 1 - alpha , color_mask , alpha , 0)
             display_frame[active] = blended[active]
 
-            Draw.draw_boxes(detector , display_frame , trackings , od_colors)
+            Draw.draw_lane_points(display_frame , cl_lane_sample_points , cr_lane_sample_points , nl_lane_sample_points , nr_lane_sample_points)
+            Draw.draw_lane_lines(display_frame , cl_lane_points , cr_lane_points , nl_lane_points , nr_lane_points)
+            Draw.draw_road_center(display_frame , center_points , current_y_far , current_y_near)
 
-            Draw.draw_lane_points(display_frame , llane_sample_points , rlane_sample_points)
-            Draw.draw_lane_lines(display_frame , llane_points , rlane_points)
-            Draw.draw_road_center(display_frame , center_points , y_far , y_near)
-
-            steering = Steering.steering(center_points , y_far , K_steering , steering_prev , speed_kmh = telemetry["speed_kmh"] , timestamp = timestamp , y_near = y_near)
+            steering = Steering.steering(center_points , current_y_far , K_steering , steering_prev , speed_kmh = telemetry["speed_kmh"] , timestamp = timestamp , y_near = current_y_near)
 
             steering_prev = steering
 
             brake = 0.0
-            brake = auto_brakes.brake(llane_points , rlane_points , trackings , timestamp , mask.shape[0] , mask.shape[1])
+            brake = auto_brakes.brake(cl_lane_points , cr_lane_points , trackings , timestamp , mask.shape[0] , mask.shape[1])
             print(steering , brake , end = "\n")
 
             if control == "enable":
@@ -119,17 +134,22 @@ def main():
             logger.write(timestamp , {
                 "image_size": [mask.shape[1] , mask.shape[0]] ,
                 "pixel_classifier_dataset": pixel_classifier_dataset ,
-                "y_far": y_far ,
-                "y_near": y_near ,
-                "lane_sample_points": {"L": llane_sample_points , "R": rlane_sample_points} ,
+                "y_far": current_y_far ,
+                "y_near": current_y_near ,
+                "neighbour_y_far": neighbour_y_far ,
+                "neighbour_y_near": neighbour_y_near ,
+                "min_neighbour_diff": min_neighbour_diff ,
+                "lane_sample_points": {"CL": cl_lane_sample_points , "CR": cr_lane_sample_points , "NL": nl_lane_sample_points , "NR": nr_lane_sample_points} ,
                 "refiner_sample_count": lane_refiner.avalible_points ,
                 "refiner_status": lane_refiner.status ,
                 "refiner_y_range": {
                     side: [min(point[1] for point in points) , max(point[1] for point in points)] if points else None
-                    for side , points in (("L" , llane_sample_points) , ("R" , rlane_sample_points))
+                    for side , points in (("CL" , cl_lane_sample_points) , ("CR" , cr_lane_sample_points) , ("NL" , nl_lane_sample_points) , ("NR" , nr_lane_sample_points))
                 } ,
-                "llane_points": llane_points ,
-                "rlane_points": rlane_points ,
+                "CL_lane_points": cl_lane_points ,
+                "CR_lane_points": cr_lane_points ,
+                "NL_lane_points": nl_lane_points ,
+                "NR_lane_points": nr_lane_points ,
                 "center_points": center_points ,
                 "trackings": trackings ,
                 "steering": steering ,
@@ -149,6 +169,10 @@ def main():
 
             height , width = frame.shape[:2]
             display_frame = cv2.resize(display_frame , (width // scale , height // scale) , interpolation = cv2.INTER_LINEAR)
+
+            scale_x = display_frame.shape[1] / mask.shape[1]
+            scale_y = display_frame.shape[0] / mask.shape[0]
+            Draw.draw_boxes(ObjectDetectorLite , display_frame , trackings , od_colors , scale_x , scale_y)
 
             Draw.show_brakes(display_frame , brake , auto_brakes.target_id , auto_brakes.ttc , auto_brakes.lane_status)
             Draw.show_refiner(display_frame , lane_refiner.status , lane_refiner.avalible_points)

@@ -39,7 +39,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     classifier.load_model(root / "pc_model_v2_bdd100k.pth")
     detector.load_model(root / "od_model_Lite.pth")
-    refiner = LaneRefiner(188 , 292 , 10)
+    refiner = LaneRefiner(188 , 292 , 10 , 260 , 292)
     movement = MovDetector()
     brakes = AutoBrakes()
     reader = SCSTelemetry()
@@ -70,23 +70,23 @@ def main():
             boxes , scores , labels = detector.box_filter(positions , boxes , scores , labels , 640 , 352 , mask , 0.5)
             trackings = movement.update(boxes , scores , labels , timestamp , 70)
             mark("filter_tracking")
-            llane_sample_points , rlane_sample_points , llane_points , rlane_points = refiner.refine(mask , 2 , 10 , return_sample = True)
-            center = refiner.calculate_center_points(llane_points , rlane_points)
+            cl_lane_sample_points , cr_lane_sample_points , nl_lane_sample_points , nr_lane_sample_points , cl_lane_points , cr_lane_points , nl_lane_points , nr_lane_points = refiner.refine(mask , 2 , 10 , 30 , return_sample = True)
+            center = refiner.calculate_center_points(cl_lane_points , cr_lane_points)
             mark("refiner")
             previous = Steering.steering(center , 188 , 3 , previous , telemetry["speed_kmh"] , timestamp , 292)
-            brake = brakes.brake(llane_points , rlane_points , trackings , timestamp , 352 , 640)
+            brake = brakes.brake(cl_lane_points , cr_lane_points , trackings , timestamp , 352 , 640)
             mark("steering_brake")
             display = cv2.resize(frame , (640 , 352))
             lane_mask = np.zeros_like(mask)
-            if llane_points and rlane_points:
-                cv2.fillPoly(lane_mask , [np.array(llane_points + rlane_points[::-1] , dtype = np.int32)] , 1)
+            if cl_lane_points and cr_lane_points:
+                cv2.fillPoly(lane_mask , [np.array(cl_lane_points + cr_lane_points[::-1] , dtype = np.int32)] , 1)
             colors = np.array([[0 , 0 , 0] , [0 , 255 , 0] , [0 , 0 , 255] , [0 , 255 , 255]] , dtype = np.uint8)
             active = ((mask == 1) & (lane_mask > 0)) | (mask == 2) | (mask == 3)
             blended = cv2.addWeighted(display , 0.7 , colors[mask] , 0.3 , 0)
             display[active] = blended[active]
             Draw.draw_boxes(detector , display , trackings , ((255 , 64 , 64) , (64 , 128 , 255)))
-            Draw.draw_lane_points(display , llane_sample_points , rlane_sample_points)
-            Draw.draw_lane_lines(display , llane_points , rlane_points)
+            Draw.draw_lane_points(display , cl_lane_sample_points , cr_lane_sample_points , nl_lane_sample_points , nr_lane_sample_points)
+            Draw.draw_lane_lines(display , cl_lane_points , cr_lane_points , nl_lane_points , nr_lane_points)
             Draw.draw_road_center(display , center , 188 , 292)
             Draw.draw_refiner(display , refiner.status , refiner.avalible_points)
             Draw.draw_brake(display , brake , brakes.target_id , brakes.ttc , brakes.lane_status)
@@ -94,8 +94,9 @@ def main():
             Draw.show_fps(display , 0)
             Draw.show_speed(display , telemetry)
             mark("draw_resize_no_gui")
-            logger.write(timestamp , {"center_points": center , "llane_points": llane_points , "rlane_points": rlane_points ,
-                                      "lane_sample_points": {"L": llane_sample_points , "R": rlane_sample_points} ,
+            logger.write(timestamp , {"center_points": center , "CL_lane_points": cl_lane_points , "CR_lane_points": cr_lane_points ,
+                                      "NL_lane_points": nl_lane_points , "NR_lane_points": nr_lane_points ,
+                                      "lane_sample_points": {"CL": cl_lane_sample_points , "CR": cr_lane_sample_points , "NL": nl_lane_sample_points , "NR": nr_lane_sample_points} ,
                                       "trackings": trackings , "telemetry": telemetry , "steering": previous})
             mark("logging")
             timings["total_no_control_no_gui"] = (time.perf_counter() - start) * 1000

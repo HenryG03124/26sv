@@ -4,6 +4,7 @@ numpy
 opencv-python
 torch
 vgamepad
+ultralytics>=8.4.0
 
 # Dataset preparation, training, and visualization
 torchvision

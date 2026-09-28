@@ -19,8 +19,8 @@ class AutoBrakes():
     def __init__(self):
         self.histories = {}
         self.risk_since = {}
-        self.llane_points = []
-        self.rlane_points = []
+        self.cl_lane_points = []
+        self.cr_lane_points = []
         self.last_lane_time = -np.inf
         self.last_risk_time = -np.inf
         self.brake_value = 0.0
@@ -29,17 +29,17 @@ class AutoBrakes():
         self.lane_status = "missing"
         self.reason = "none"
 
-    def update_lanes(self , llane_points , rlane_points , timestamp):
-        if len(llane_points) >= 2 and len(rlane_points) >= 2:
-            self.llane_points = sorted(llane_points , key = lambda point: point[1]) #sort by y
-            self.rlane_points = sorted(rlane_points , key = lambda point: point[1])
+    def update_lanes(self , cl_lane_points , cr_lane_points , timestamp):
+        if len(cl_lane_points) >= 2 and len(cr_lane_points) >= 2:
+            self.cl_lane_points = sorted(cl_lane_points , key = lambda point: point[1]) #sort by y
+            self.cr_lane_points = sorted(cr_lane_points , key = lambda point: point[1])
             self.last_lane_time = timestamp
             self.lane_status = "current"
         elif timestamp - self.last_lane_time <= lane_hold_time:
             self.lane_status = "held"
         else:
-            self.llane_points = []
-            self.rlane_points = []
+            self.cl_lane_points = []
+            self.cr_lane_points = []
             self.lane_status = "missing"
 
     def lane_x(self , points , y , width):
@@ -55,23 +55,23 @@ class AutoBrakes():
         return float(np.clip(points[-1 , 0] + slope * (y - points[-1 , 1]) , 0 , width - 1))
 
     def in_lane(self , box , height , width):
-        if not self.llane_points or not self.rlane_points:
+        if not self.cl_lane_points or not self.cr_lane_points:
             return False
 
         x1 , y1 , x2 , y2 = box
         bottom_y = min(y2 , height - 1)
-        far_y = max(self.llane_points[0][1] , self.rlane_points[0][1])
-        near_y = min(self.llane_points[-1][1] , self.rlane_points[-1][1])
+        far_y = max(self.cl_lane_points[0][1] , self.cr_lane_points[0][1])
+        near_y = min(self.cl_lane_points[-1][1] , self.cr_lane_points[-1][1])
         if bottom_y < far_y or bottom_y > near_y + height * 0.2:
             return False
 
-        llane_x = self.lane_x(self.llane_points , bottom_y , width)
-        rlane_x = self.lane_x(self.rlane_points , bottom_y , width)
-        if rlane_x <= llane_x or x2 <= x1:
+        cl_lane_x = self.lane_x(self.cl_lane_points , bottom_y , width)
+        cr_lane_x = self.lane_x(self.cr_lane_points , bottom_y , width)
+        if cr_lane_x <= cl_lane_x or x2 <= x1:
             return False
 
-        overlap = max(0 , min(x2 , rlane_x) - max(x1 , llane_x))
-        return overlap / min(x2 - x1 , rlane_x - llane_x) >= overlap_threshold
+        overlap = max(0 , min(x2 , cr_lane_x) - max(x1 , cl_lane_x))
+        return overlap / min(x2 - x1 , cr_lane_x - cl_lane_x) >= overlap_threshold
 
     def calculate_ttc(self , history): #time to crash
         if len(history) < 3 or history[-1][0] - history[0][0] < min_history_time:
@@ -86,8 +86,8 @@ class AutoBrakes():
 
         return float(heights[-1] / height_rate)
 
-    def brake(self , llane_points , rlane_points , trackings , timestamp , height , width):
-        self.update_lanes(llane_points , rlane_points , timestamp)
+    def brake(self , cl_lane_points , cr_lane_points , trackings , timestamp , height , width):
+        self.update_lanes(cl_lane_points , cr_lane_points , timestamp)
         active_ids = {track_id for track_id , tracking in trackings.items() if tracking["status"] == "tracked"}
         self.histories = {track_id: history for track_id , history in self.histories.items() if track_id in active_ids}
         self.risk_since = {track_id: start for track_id , start in self.risk_since.items() if track_id in active_ids}

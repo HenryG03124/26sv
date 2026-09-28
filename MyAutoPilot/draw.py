@@ -30,26 +30,28 @@ class Draw():
         cv2.putText(frame , text = text , org = (text_margin , text_top) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = color , thickness = 1 , lineType = cv2.LINE_AA)
 
     def show_refiner(frame , status , avalible_points):
-        for index , side in enumerate(("L" , "R")):
+        for index , side in enumerate(("CL" , "CR" , "NL" , "NR")):
             text = f"Refiner {side}: {status[side]} Points:{avalible_points[side]}"
             color = (0 , 255 , 0) if status[side] == "tracking" else (0 , 180 , 255)
             cv2.putText(frame , text = text , org = (text_margin , text_top + (index + 2) * text_line_height) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = color , thickness = 1 , lineType = cv2.LINE_AA)
         text = f"Road center: {status["center"]}"
         color = (0 , 255 , 0) if status["center"] == "accurate" else (0 , 180 , 255)
-        cv2.putText(frame , text = text , org = (text_margin , text_top + 4 * text_line_height) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = color , thickness = 1 , lineType = cv2.LINE_AA)
+        cv2.putText(frame , text = text , org = (text_margin , text_top + 6 * text_line_height) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = color , thickness = 1 , lineType = cv2.LINE_AA)
 
-    def draw_boxes(detector , frame , trackings , od_colors):
+    def draw_boxes(detector , frame , trackings , od_colors , scale_x = 1 , scale_y = 1):
         for track_id , tracking in trackings.items():
             if tracking["status"] != "tracked":
                 continue
-            x1, y1, x2, y2 = map(int , tracking["box"])
+            x1 , y1 , x2 , y2 = tracking["box"]
+            x1 , x2 = int(x1 * scale_x) , int(x2 * scale_x)
+            y1 , y2 = int(y1 * scale_y) , int(y2 * scale_y)
             label = tracking["label"]
             score = tracking["score"]
             direction = tracking["direction"]
             cv2.rectangle(frame , (x1 , y1) , (x2 , y2) , color = od_colors[label] , thickness = 1 , lineType = cv2.LINE_AA)
-            cv2.putText(frame , text = detector.class_names[label] + f" {score:.2f} ID:{track_id} {direction}" , org = (x1 , max(y1 - 5 , 0)) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = 0.3 , color = od_colors[label] , thickness = 1 , lineType = cv2.LINE_AA)
+            cv2.putText(frame , text = detector.class_names[label] + f" {score:.2f} ID:{track_id} {direction}" , org = (x1 , max(y1 - 5 , 0)) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = 0.6 , color = od_colors[label] , thickness = 1 , lineType = cv2.LINE_AA)
 
-    def draw_road_center(frame , center_points , y_far , y_near):
+    def draw_road_center(frame , center_points , current_y_far , current_y_near):
         if len(center_points) < 3:
             return
 
@@ -58,22 +60,33 @@ class Draw():
 
         yxdict = {y: x for x , y in center_points}
 
-        for y in (y_far, y_near):
+        for y in (current_y_far , current_y_near):
             if y in yxdict:
                 cv2.circle(frame , center = (int(yxdict[y]) , int(y)) , radius = 5 , color = (0 , 255 , 255) , thickness = -1  ,lineType = cv2.LINE_AA)
 
-        if y_near in yxdict:
-            pts = np.array([[320 , 351] , [int(yxdict[y_near]) , int(y_near)]] , dtype = np.int32)
+        if current_y_near in yxdict:
+            pts = np.array([[320 , 351] , [int(yxdict[current_y_near]) , int(current_y_near)]] , dtype = np.int32)
             cv2.polylines(frame , [pts] , isClosed = False , color = (255 , 0 , 0) , thickness = 1 , lineType = cv2.LINE_AA)
 
-    def draw_lane_points(frame , llane_sample_points , rlane_sample_points):
-        for point in llane_sample_points:
+    def draw_lane_points(frame , cl_lane_sample_points , cr_lane_sample_points , nl_lane_sample_points , nr_lane_sample_points):
+        for point in cl_lane_sample_points:
             cv2.circle(frame , center = (int(point[0]) , int(point[1])) , radius = 1 , color = (0 , 0 , 255) , thickness = -1  ,lineType = cv2.LINE_AA)
-        for point in rlane_sample_points:
+        for point in cr_lane_sample_points:
+            cv2.circle(frame , center = (int(point[0]) , int(point[1])) , radius = 1 , color = (0 , 0 , 0) , thickness = -1  ,lineType = cv2.LINE_AA)
+        for point in nl_lane_sample_points:
+            cv2.circle(frame , center = (int(point[0]) , int(point[1])) , radius = 1 , color = (0 , 0 , 255) , thickness = -1  ,lineType = cv2.LINE_AA)
+        for point in nr_lane_sample_points:
             cv2.circle(frame , center = (int(point[0]) , int(point[1])) , radius = 1 , color = (0 , 0 , 0) , thickness = -1  ,lineType = cv2.LINE_AA)
 
-    def draw_lane_lines(frame , llane_points , rlane_points):
-        for lane_points in (llane_points , rlane_points):
+    def draw_lane_lines(frame , cl_lane_points , cr_lane_points , nl_lane_points , nr_lane_points):
+        for lane_points in (cl_lane_points , cr_lane_points):
+            if len(lane_points) < 3:
+                continue
+
+            points = np.array(lane_points , dtype = np.int32).reshape(-1 , 1 , 2)
+            cv2.polylines(frame , [points] , isClosed = False , color = (0 , 255 , 255) , thickness = 1 , lineType = cv2.LINE_AA)
+
+        for lane_points in (nl_lane_points , nr_lane_points):
             if len(lane_points) < 3:
                 continue
 

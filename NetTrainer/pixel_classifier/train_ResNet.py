@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.utils.data as tud
 from pathlib import Path
-from MyImageIdentifier.pixel_classifier.bdd_pc_ds import BDDVehicleRoadDataset
+from NetTrainer.pixel_classifier.bdd_pc_ds import BDDVehicleRoadDataset
 
 DATASETS_DIR = Path(__file__).resolve().parent.parent / "datasets"
 

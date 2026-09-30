@@ -37,8 +37,8 @@ def main():
     classifier = PixelClassifierV2()
     detector = ObjectDetectorLite()
     root = Path(__file__).resolve().parents[1]
-    classifier.load_model(root / "pc_model_v2_bdd100k.pth")
-    detector.load_model(root / "od_model_Lite.pth")
+    classifier.load_model(root / "weights/pc_model_v2_bdd100k.pth")
+    detector.load_model(root / "weights/od_model_Lite.pth")
     refiner = LaneRefiner(188 , 292 , 10 , 260 , 292)
     movement = MovDetector()
     brakes = AutoBrakes()

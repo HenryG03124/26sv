@@ -18,18 +18,18 @@
 
 输入与 PC V2 分辨率一致：RGB，`float32`，数值 `[0,1]`，单张图片形状 `(3,352,640)`。读取时使用 PIL 双线性缩放，不额外做 ImageNet 标准化。训练、单图测试和 `MyAutoPilot` 推理均使用 640×352 输入及 22×40 输出网格。
 
-`train_pairs.csv` / `val_pairs.csv` 分别对应 69,863 / 10,000 张有检测标注的图片。CSV 的图片路径指向 `C:/Users/HenryGuo/Downloads/BDD100K_detection/bdd100k/images/100k`，移动原图后需要重新运行整理脚本。
+`NetTrainer/datasets/processed_objdetect_ds/train_pairs.csv` / `val_pairs.csv` 分别对应 69,863 / 10,000 张有检测标注的图片。CSV 的图片路径相对于清单目录，指向 `NetTrainer/datasets/objdetect_ds/images/100k`，移动原图后需要同步更新清单。
 
-下载的训练原图共 70,000 张，其中 137 张没有原始检测标注，保留在 Downloads，但不加入训练索引，也不作为空目标/背景样本使用。名单见 `train_unannotated_images.txt`。
+下载的训练原图共 70,000 张，其中 137 张没有原始检测标注，不加入训练索引，也不作为空目标/背景样本使用。名单见 `NetTrainer/datasets/processed_objdetect_ds/train_unannotated_images.txt`。
 
 每张图片的原始像素坐标标签存放在 `train/labels`、`val/labels`。读取器会将边界框同步缩放至 640×352：横坐标乘 `640/原宽`，纵坐标乘 `352/原高`。返回的 `boxes` 为 `(N,4)` 的 float32 `[x1,y1,x2,y2]`，单位是缩放后图片的像素，不是归一化坐标。
 
 ```python
 from torch.utils.data import DataLoader
-from MyImageIdentifier.object_detector.bdd_objdetect import BDDDetectionDataset, detection_collate_fn
+from NetTrainer.object_detector.bdd_objdetect_ds import BDDDetectionDataset , detection_collate_fn
 
-train_dataset = BDDDetectionDataset("MyImageIdentifier/datasets/processed_objdetect_ds/train_pairs.csv")
-val_dataset = BDDDetectionDataset("MyImageIdentifier/datasets/processed_objdetect_ds/val_pairs.csv")
+train_dataset = BDDDetectionDataset("NetTrainer/datasets/processed_objdetect_ds/train_pairs.csv")
+val_dataset = BDDDetectionDataset("NetTrainer/datasets/processed_objdetect_ds/val_pairs.csv")
 train_loader = DataLoader(train_dataset , batch_size = 64 , shuffle = True , collate_fn = detection_collate_fn)
 val_loader = DataLoader(val_dataset , batch_size = 64 , shuffle = False , collate_fn = detection_collate_fn)
 
@@ -47,4 +47,4 @@ images, targets = next(iter(train_loader))
 
 现有 `train_ResNet.py`、分割数据读取器和 `processed_pc_ds` 均保持原样。你添加 detector 时，需要使用上面的检测 Dataset 和 collate 函数；原来的掩码损失循环仍是语义分割训练循环。
 
-重新整理：在工作区根目录运行 `python -m MyImageIdentifier.object_detector.prepare_bdd_objdetect`。每次完成整理后，会生成对应的 CSV 和 report；未完成的 CSV 使用 `.partial` 后缀。
+当前仓库未保留检测数据整理脚本；训练直接读取 `NetTrainer/datasets/processed_objdetect_ds` 中已有的 CSV 和标签。

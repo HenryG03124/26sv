@@ -39,7 +39,6 @@ monitor_index = 2
 window_name = "Euro Truck Simulator 2"
 scale = 1
 
-pixel_classifier_dataset = "bdd100k" #bdd100k / a2d2 / culane
 use_yolo = False #True: pretrained YOLO26n , False: custom Lite detector
 control = "enable"
 
@@ -50,7 +49,7 @@ def main():
     capturer = ScreenCapture(monitor_index)
 
     classifier = PixelClassifierV2()
-    classifier.load_model(f"weights/pc_model_v2_{pixel_classifier_dataset}.pth")
+    classifier.load_model("weights/pc_model_v2_bdd100k.pth")
 
     if use_yolo:
         from ultralytics import YOLO
@@ -133,7 +132,7 @@ def main():
 
             logger.write(timestamp , {
                 "image_size": [mask.shape[1] , mask.shape[0]] ,
-                "pixel_classifier_dataset": pixel_classifier_dataset ,
+                "pixel_classifier_dataset": "bdd100k" ,
                 "y_far": current_y_far ,
                 "y_near": current_y_near ,
                 "neighbour_y_far": neighbour_y_far ,

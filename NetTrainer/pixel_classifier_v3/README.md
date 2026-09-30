@@ -84,7 +84,7 @@ python -m NetTrainer.pixel_classifier_v3.train
 默认同时训练 road/car、lane 和 steering 三个任务，需要以下数据：
 
 - road/car：`NetTrainer/datasets/processed_pc_ds/{train,val}_pairs.csv`
-- lane：`NetTrainer/datasets/processed_pc_lane_ds_bdd100k/{train,val}_pairs.csv`
+- lane：`NetTrainer/datasets/processed_pc_lane_ds/{train,val}_pairs.csv`
 - steering：递归读取 `NetTrainer/datasets/ets2_steering/**/samples.csv`
 
 road 和 lane 保留 v2 的 `train_task` / `evaluate_task`；steering 使用 `train_steering` / `evaluate_steering` 和 SmoothL1 损失。三个任务按 batch 进度交替更新同一个网络，各自使用对应数据，不需要为同一图片同时准备三种标签。

@@ -11,13 +11,13 @@ from Models.pc_v3 import UNet
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATASETS_DIR = SCRIPT_DIR.parent / "datasets"
 
-from NetTrainer.pixel_classifier_v2.bdd100k.pc_v2_bdd100k_ds import BDDLaneDataset
+from NetTrainer.pixel_classifier_v2.pc_v2_bdd100k_ds import BDDLaneDataset
 from NetTrainer.pixel_classifier_v3.steering_dataset import SteeringDataset , split_steering_dataset
 
 road_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds/train_pairs.csv")
 road_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_ds/val_pairs.csv")
-full_lane_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_lane_ds_bdd100k/train_pairs.csv")
-lane_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_lane_ds_bdd100k/val_pairs.csv")
+full_lane_train_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_lane_ds/train_pairs.csv")
+lane_val_dataset = BDDLaneDataset(DATASETS_DIR / "processed_pc_lane_ds/val_pairs.csv")
 
 steering_target = "gameSteer"
 full_steering_dataset = SteeringDataset(DATASETS_DIR / "ets2_steering" , target = steering_target)

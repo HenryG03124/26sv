@@ -23,7 +23,7 @@ class Draw():
     def show_brakes(frame , brake , target_id , ttc , lane_status):
         target_text = "-" if target_id is None else str(target_id)
         ttc_text = "-" if ttc is None else f"{ttc:.1f}s"
-        text = f"BRAKE:{brake:.2f} ID:{target_text} TTC:{ttc_text} \nLane:{lane_status}"
+        text = f"BRAKE: {brake:.2f} ID: {target_text} TTC: {ttc_text} \nLane: {lane_status}"
         color = (0 , 0 , 255) if brake > 0 else (0 , 255 , 0)
         if brake == 0 and lane_status != "current":
             color = (0 , 180 , 255)
@@ -85,10 +85,11 @@ class Draw():
 
             points = np.array(lane_points , dtype = np.int32).reshape(-1 , 1 , 2)
             cv2.polylines(frame , [points] , isClosed = False , color = (0 , 255 , 255) , thickness = 1 , lineType = cv2.LINE_AA)
-
+        '''
         for lane_points in (nl_lane_points , nr_lane_points):
             if len(lane_points) < 3:
                 continue
 
             points = np.array(lane_points , dtype = np.int32).reshape(-1 , 1 , 2)
             cv2.polylines(frame , [points] , isClosed = False , color = (0 , 255 , 255) , thickness = 1 , lineType = cv2.LINE_AA)
+        '''

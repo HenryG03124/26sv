@@ -6,7 +6,6 @@ __pycache__/
 
 datasets/
 MyAutoPilot/logs/
-MyAutoPilot_Carla/
 
 notes.md
 AGENTS.md

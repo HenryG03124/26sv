@@ -18,6 +18,11 @@ class InputController:
         self.gamepad.left_trigger_float(value_float = brake)
         self.gamepad.update()
 
+    def throttle_controller(self , throttle):
+        throttle = max(0.0 , min(1.0 , throttle))
+        self.gamepad.right_trigger_float(value_float = throttle)
+        self.gamepad.update()
+
     def close(self):
         self.gamepad.reset()
         self.gamepad.update()

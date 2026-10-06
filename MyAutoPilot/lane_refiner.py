@@ -17,6 +17,7 @@ class LaneRefiner():
         self.neighbour_y_far = neighbour_y_far
         self.neighbour_y_near = neighbour_y_near
         self.prev_lane_width = []
+        self.tracking_frames = 0
 
     def calculate_slope(self , points):
         slope = 0
@@ -238,6 +239,11 @@ class LaneRefiner():
         nl_lane_points = self.fit_lane_points(nl_lane_sample_points , height , width , degree , "NL")
         nr_lane_points = self.fit_lane_points(nr_lane_sample_points , height , width , degree , "NR")
 
+        if cl_lane_points and cr_lane_points and self.status["CL"] == "tracking" and self.status["CR"] == "tracking":
+            self.tracking_frames += 1
+        else:
+            self.tracking_frames = 0
+
         if return_sample:
             return cl_lane_sample_points , cr_lane_sample_points , nl_lane_sample_points , nr_lane_sample_points , cl_lane_points , cr_lane_points , nl_lane_points , nr_lane_points
         else:
@@ -264,7 +270,8 @@ class LaneRefiner():
             cr_lane_yxdict = {y : x for x , y in cr_lane_points}
             common_y_values = sorted(cl_lane_yxdict.keys() & cr_lane_yxdict.keys() , reverse = True)
             center_points = [[(cl_lane_yxdict[y] + cr_lane_yxdict[y]) // 2 , y] for y in common_y_values]
-            self.update_lane_width(cl_lane_points , cr_lane_points)
+            if self.tracking_frames >= 5:
+                self.update_lane_width(cl_lane_points , cr_lane_points)
             self.status["center"] = "accurate" if center_points else "missing"
 
         return center_points

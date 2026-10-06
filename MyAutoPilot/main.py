@@ -10,6 +10,7 @@ from mov_detector import MovDetector
 from lane_refiner import LaneRefiner
 from steering import Steering
 from auto_brakes import AutoBrakes
+from throttle import Throttle
 from input_controller import InputController
 from logger import Logger
 from scs_telemetry import SCSTelemetry
@@ -61,6 +62,7 @@ def main():
 
     lane_refiner = LaneRefiner(current_y_far , current_y_near , lane_x_diff , neighbour_y_far , neighbour_y_near)
     auto_brakes = AutoBrakes()
+    throttle_controller = Throttle()
     input_controller = InputController()
     logger = Logger()
     telemetry_reader = SCSTelemetry()
@@ -122,10 +124,12 @@ def main():
 
             brake = 0.0
             brake = auto_brakes.brake(cl_lane_points , cr_lane_points , trackings , timestamp , mask.shape[0] , mask.shape[1])
-            print(steering , brake , end = "\n")
+            throttle = throttle_controller.throttle(telemetry , lane_refiner.tracking_frames , brake , timestamp)
+            print("steering:" , steering , "brake:" , brake , "throttle:" , throttle , flush = True)
 
             if control == "enable":
                 input_controller.steering_controller(steering)
+                input_controller.throttle_controller(throttle)
                 input_controller.brake_controller(brake)
 
             control_timestamp = time.monotonic()
@@ -141,6 +145,7 @@ def main():
                 "lane_sample_points": {"CL": cl_lane_sample_points , "CR": cr_lane_sample_points , "NL": nl_lane_sample_points , "NR": nr_lane_sample_points} ,
                 "refiner_sample_count": lane_refiner.avalible_points ,
                 "refiner_status": lane_refiner.status ,
+                "lane_tracking_frames": lane_refiner.tracking_frames ,
                 "refiner_y_range": {
                     side: [min(point[1] for point in points) , max(point[1] for point in points)] if points else None
                     for side , points in (("CL" , cl_lane_sample_points) , ("CR" , cr_lane_sample_points) , ("NL" , nl_lane_sample_points) , ("NR" , nr_lane_sample_points))
@@ -157,6 +162,7 @@ def main():
                 "telemetry": telemetry ,
                 "fps": fps ,
                 "brake": brake ,
+                "throttle": throttle ,
                 "brake_target_id": auto_brakes.target_id ,
                 "ttc": auto_brakes.ttc ,
                 "lane_status": auto_brakes.lane_status ,
@@ -164,6 +170,7 @@ def main():
                 "control": control ,
                 "steering_sent": control == "enable" ,
                 "brake_sent": control == "enable" ,
+                "throttle_sent": control == "enable" ,
             })
 
             height , width = frame.shape[:2]
@@ -177,6 +184,7 @@ def main():
             Draw.show_refiner(display_frame , lane_refiner.status , lane_refiner.avalible_points)
             Draw.show_fps(display_frame , fps)
             Draw.show_speed(display_frame , telemetry)
+            Draw.show_throttle(display_frame , throttle)
 
             cv2.imshow("Result" , display_frame)
 

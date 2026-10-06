@@ -46,6 +46,7 @@ control = "enable"
 def main():
     steering = 0
     steering_prev = 0
+    center_tracking_frames = 0
 
     capturer = ScreenCapture(monitor_index)
 
@@ -101,6 +102,10 @@ def main():
 
             cl_lane_sample_points , cr_lane_sample_points , nl_lane_sample_points , nr_lane_sample_points , cl_lane_points , cr_lane_points , nl_lane_points , nr_lane_points = lane_refiner.refine(mask , degree , sgl_lane_x_offset , min_neighbour_diff , return_sample = True)
             center_points = lane_refiner.calculate_center_points(cl_lane_points , cr_lane_points)
+            if center_points:
+                center_tracking_frames += 1
+            else:
+                center_tracking_frames = 0
 
             current_lane_mask = np.zeros_like(mask , dtype = np.uint8)
 
@@ -124,7 +129,7 @@ def main():
 
             brake = 0.0
             brake = auto_brakes.brake(cl_lane_points , cr_lane_points , trackings , timestamp , mask.shape[0] , mask.shape[1])
-            throttle = throttle_controller.throttle(telemetry , lane_refiner.tracking_frames , brake , timestamp)
+            throttle = throttle_controller.throttle(telemetry , center_tracking_frames , brake , timestamp)
             print("steering:" , steering , "brake:" , brake , "throttle:" , throttle , flush = True)
 
             if control == "enable":
@@ -146,6 +151,7 @@ def main():
                 "refiner_sample_count": lane_refiner.avalible_points ,
                 "refiner_status": lane_refiner.status ,
                 "lane_tracking_frames": lane_refiner.tracking_frames ,
+                "center_tracking_frames": center_tracking_frames ,
                 "refiner_y_range": {
                     side: [min(point[1] for point in points) , max(point[1] for point in points)] if points else None
                     for side , points in (("CL" , cl_lane_sample_points) , ("CR" , cr_lane_sample_points) , ("NL" , nl_lane_sample_points) , ("NR" , nr_lane_sample_points))

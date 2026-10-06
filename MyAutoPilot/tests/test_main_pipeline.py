@@ -32,11 +32,18 @@ class MainPipelineTests(unittest.TestCase):
             mask[y , 440] = 3
             mask[y , 460] = 3
             mask[y , 580] = 3
+        left_mask = mask.copy()
+        left_mask[: , 320:] = 0
+        right_mask = mask.copy()
+        right_mask[: , :320] = 0
+        missing_mask = np.zeros_like(mask)
+        masks = [mask] * 6 + [left_mask] * 8 + [right_mask] * 8 + [missing_mask] + [left_mask] * 5 + [missing_mask] + [right_mask] * 5
+        frame_count = len(masks)
         capture = Mock()
         capture.capture_window.return_value = np.zeros((352 , 640 , 3) , dtype = np.uint8)
         capture.native_resolution.return_value = (1280 , 704)
         classifier = Mock()
-        classifier.predict.side_effect = [mask] * 6 + [np.zeros_like(mask)]
+        classifier.predict.side_effect = masks
         detector = Mock()
         detector.predict.return_value = (None , None , None , None)
         detector.box_filter.return_value = ([] , [] , [])
@@ -62,8 +69,8 @@ class MainPipelineTests(unittest.TestCase):
                     stack.enter_context(patch.object(module , name , return_value = value))
                 stack.enter_context(patch.object(module.cv2 , "imshow"))
                 stack.enter_context(patch.object(module.cv2 , "destroyAllWindows"))
-                stack.enter_context(patch.object(module.cv2 , "waitKey" , side_effect = [-1] * 6 + [ord("q")]))
-                stack.enter_context(patch.object(module.AutoBrakes , "brake" , side_effect = [0.0] * 5 + [0.5 , 0.0]))
+                stack.enter_context(patch.object(module.cv2 , "waitKey" , side_effect = [-1] * (frame_count - 1) + [ord("q")]))
+                stack.enter_context(patch.object(module.AutoBrakes , "brake" , side_effect = [0.0] * 5 + [0.5] + [0.0] * (frame_count - 6)))
                 output = stack.enter_context(patch("builtins.print"))
                 fps = stack.enter_context(patch.object(module.Draw , "show_fps"))
                 speed = stack.enter_context(patch.object(module.Draw , "show_speed"))
@@ -71,9 +78,9 @@ class MainPipelineTests(unittest.TestCase):
                 module.main()
         finally:
             module.Steering.reset()
-        self.assertEqual(len(records) , 7)
-        self.assertEqual(capture.capture_window.call_count , 7)
-        self.assertEqual(movement.update.call_count , 7)
+        self.assertEqual(len(records) , frame_count)
+        self.assertEqual(capture.capture_window.call_count , frame_count)
+        self.assertEqual(movement.update.call_count , frame_count)
         for call in movement.update.call_args_list:
             self.assertEqual(call.args[:3] , ([] , [] , []))
             self.assertEqual(call.args[4] , module.spd)
@@ -95,16 +102,29 @@ class MainPipelineTests(unittest.TestCase):
             self.assertNotIn("road_center_mode" , record)
             self.assertNotIn("timings_ms" , record)
             self.assertNotIn("timings_frame_id" , record)
-        self.assertEqual([record["lane_tracking_frames"] for record in records] , [1 , 2 , 3 , 4 , 5 , 6 , 0])
+        self.assertEqual([record["lane_tracking_frames"] for record in records] , [1 , 2 , 3 , 4 , 5 , 6] + [0] * (frame_count - 6))
+        self.assertEqual([record["center_tracking_frames"] for record in records] , list(range(1 , 23)) + [0 , 1 , 2 , 3 , 4 , 5 , 0 , 1 , 2 , 3 , 4 , 5])
         self.assertEqual([record["throttle"] for record in records[:4]] , [0.0] * 4)
         self.assertGreater(records[4]["throttle"] , 0)
-        self.assertEqual([record["throttle"] for record in records[5:]] , [0.0 , 0.0])
-        self.assertEqual(fps.call_count , 7)
-        self.assertEqual(speed.call_count , 7)
-        self.assertEqual(throttle.call_count , 7)
-        self.assertEqual(output.call_count , 7)
-        self.assertEqual(controller.steering_controller.call_count , 7)
-        self.assertEqual(controller.throttle_controller.call_count , 7)
+        self.assertEqual(records[5]["throttle"] , 0)
+        for record in records[6:22]:
+            self.assertGreater(record["throttle"] , 0)
+        for start , end , present , missing in ((6 , 14 , "CL" , "CR") , (14 , 22 , "CR" , "CL") , (23 , 28 , "CL" , "CR") , (29 , 34 , "CR" , "CL")):
+            for record in records[start:end]:
+                self.assertTrue(record[present + "_lane_points"])
+                self.assertEqual(record[missing + "_lane_points"] , [])
+                self.assertEqual(record["center_points"] , records[4]["center_points"])
+        for index in (22 , 28):
+            self.assertEqual(records[index]["center_points"] , [])
+            self.assertEqual(records[index]["throttle"] , 0)
+            self.assertEqual([record["throttle"] for record in records[index + 1:index + 5]] , [0.0] * 4)
+            self.assertGreater(records[index + 5]["throttle"] , 0)
+        self.assertEqual(fps.call_count , frame_count)
+        self.assertEqual(speed.call_count , frame_count)
+        self.assertEqual(throttle.call_count , frame_count)
+        self.assertEqual(output.call_count , frame_count)
+        self.assertEqual(controller.steering_controller.call_count , frame_count)
+        self.assertEqual(controller.throttle_controller.call_count , frame_count)
         for index , record in enumerate(records):
             self.assertTrue(record["throttle_sent"])
             self.assertEqual(controller.throttle_controller.call_args_list[index].args , (record["throttle"] ,))

@@ -9,9 +9,9 @@ class Throttle():
         self.integral = 0.0
         self.prev_time = None
 
-    def throttle(self , telemetry , tracking_frames , brake , timestamp):
+    def throttle(self , telemetry , center_tracking_frames , brake , timestamp):
         speed = telemetry["speed_kmh"]
-        if tracking_frames < 5 or brake > 0 or telemetry["status"] != "ok" or speed is None or not math.isfinite(speed) or speed < 0:
+        if center_tracking_frames < 5 or brake > 0 or telemetry["status"] != "ok" or speed is None or not math.isfinite(speed) or speed < 0:
             self.integral = 0.0
             self.prev_time = None
             return 0.0
@@ -21,7 +21,6 @@ class Throttle():
         error = target_speed - speed
         throttle = Kp * error + self.integral
 
-        # Stop integral growth while the output is saturated.
         if 0 < throttle < 1 or (throttle >= 1 and error < 0) or (throttle <= 0 and error > 0):
             self.integral = max(0.0 , min(1.0 , self.integral + Ki * error * dt))
 

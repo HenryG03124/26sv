@@ -22,7 +22,8 @@ class Draw():
 
     def show_throttle(frame , throttle):
         text = f"THROTTLE: {throttle:.0%}"
-        position = (text_margin , text_top + text_line_height)
+        text_width = cv2.getTextSize(text , cv2.FONT_HERSHEY_SIMPLEX , fontScale , 1)[0][0]
+        position = (frame.shape[1] - text_width - text_margin , text_top + 2 * text_line_height)
         cv2.putText(frame , text = text , org = position , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = (0 , 255 , 255) , thickness = 1 , lineType = cv2.LINE_AA)
 
     def show_brakes(frame , brake , target_id , ttc , lane_status):

@@ -4,7 +4,7 @@ car_label_id = 1
 pedestrian_label_id = 0
 truck_label_id = 2
 max_missing_time = 0.5 #seconds
-max_center_diff = 10 #px
+max_center_diff = 6 #px
 
 class MovDetector():
     def __init__(self):

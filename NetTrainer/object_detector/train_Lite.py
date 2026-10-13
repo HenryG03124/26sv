@@ -216,7 +216,7 @@ loss_set = []
 miou_set = []
 model.train()
 
-for epoch in range(30):
+for epoch in range(20):
     try:
         total_loss = 0
         train_iou_sum = torch.zeros(number_of_classes , dtype = torch.float64 , device = device)

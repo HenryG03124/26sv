@@ -44,6 +44,16 @@ class Draw():
         color = (0 , 255 , 0) if status["center"] == "accurate" else (0 , 180 , 255)
         cv2.putText(frame , text = text , org = (text_margin , text_top + 6 * text_line_height) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = color , thickness = 1 , lineType = cv2.LINE_AA)
 
+    def show_priority(frame , priority):
+        text = f"Priority: {priority}"
+        cv2.putText(frame , text = text , org = (text_margin , text_top + 7 * text_line_height) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = (0 , 255 , 0) , thickness = 1 , lineType = cv2.LINE_AA)
+
+    def show_available(frame , lane_change_available):
+        for index , side in enumerate(("L" , "R")):
+            text = f"Change available {side}: {lane_change_available[side]}"
+            color = (0 , 255 , 0) if lane_change_available[side] else (0 , 180 , 255)
+            cv2.putText(frame , text = text , org = (text_margin , text_top + (index + 8) * text_line_height) , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = color , thickness = 1 , lineType = cv2.LINE_AA)
+
     def draw_boxes(detector , frame , trackings , od_colors , scale_x = 1 , scale_y = 1):
         for track_id , tracking in trackings.items():
             if tracking["status"] != "tracked":

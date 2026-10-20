@@ -19,7 +19,7 @@ class AutoBrakesTests(unittest.TestCase):
 
     def step(self , timestamp , box = None , track_id = 1 , direction = "stationary" , lanes = True):
         trackings = {} if box is None else {track_id: self.tracking(box , direction)}
-        return self.brakes.brake(self.cl_lane_points if lanes else [] , self.cr_lane_points if lanes else [] , trackings , timestamp , 352 , 640)
+        return self.brakes.brake(self.cl_lane_points if lanes else [] , self.cr_lane_points if lanes else [] , trackings , timestamp , 352 , 640 , lanes)
 
     def test_static_distant_car_does_not_brake(self):
         for i in range(20):
@@ -88,7 +88,7 @@ class AutoBrakesTests(unittest.TestCase):
 
     def test_lost_track_cannot_trigger_braking(self):
         trackings = {1: self.tracking([290 , 250 , 350 , 320] , status = "lost")}
-        self.assertEqual(self.brakes.brake(self.cl_lane_points , self.cr_lane_points , trackings , 0 , 352 , 640) , 0)
+        self.assertEqual(self.brakes.brake(self.cl_lane_points , self.cr_lane_points , trackings , 0 , 352 , 640 , True) , 0)
 
     def test_release_holds_through_short_detection_dropout(self):
         self.step(0 , [290 , 250 , 350 , 320])
@@ -115,6 +115,27 @@ class AutoBrakesTests(unittest.TestCase):
         self.assertEqual(self.step(0.7 , box , lanes = False) , 0)
         self.assertEqual(self.brakes.lane_status , "missing")
 
+    def test_unavailable_points_do_not_refresh_cached_lanes(self):
+        self.brakes.update_lanes(self.cl_lane_points , self.cr_lane_points , 0 , True)
+        moved_cl = [[x + 30 , y] for x , y in self.cl_lane_points]
+        moved_cr = [[x + 30 , y] for x , y in self.cr_lane_points]
+        self.brakes.brake(moved_cl , moved_cr , {} , 0.3 , 352 , 640 , False)
+        self.assertEqual(self.brakes.cl_lane_points , self.cl_lane_points)
+        self.assertEqual(self.brakes.cr_lane_points , self.cr_lane_points)
+        self.assertEqual(self.brakes.last_lane_time , 0)
+        self.assertEqual(self.brakes.lane_status , "held")
+
+        self.brakes.brake(moved_cl , moved_cr , {} , 0.51 , 352 , 640 , False)
+        self.assertEqual(self.brakes.cl_lane_points , [])
+        self.assertEqual(self.brakes.cr_lane_points , [])
+        self.assertEqual(self.brakes.lane_status , "missing")
+
+    def test_unavailable_points_cannot_initialize_cached_lanes(self):
+        self.brakes.brake(self.cl_lane_points , self.cr_lane_points , {} , 0 , 352 , 640 , False)
+        self.assertEqual(self.brakes.cl_lane_points , [])
+        self.assertEqual(self.brakes.cr_lane_points , [])
+        self.assertEqual(self.brakes.lane_status , "missing")
+
     def test_far_and_crossed_boundaries_are_not_used(self):
         self.assertEqual(self.step(0 , [290 , 80 , 350 , 180]) , 0)
         self.cl_lane_points , self.cr_lane_points = self.cr_lane_points , self.cl_lane_points
@@ -126,7 +147,7 @@ class AutoBrakesTests(unittest.TestCase):
             2: self.tracking([320 , 250 , 380 , 320]) ,
         }
         for timestamp in (0 , 0.2):
-            value = self.brakes.brake(self.cl_lane_points , self.cr_lane_points , trackings , timestamp , 352 , 640)
+            value = self.brakes.brake(self.cl_lane_points , self.cr_lane_points , trackings , timestamp , 352 , 640 , True)
         self.assertEqual(value , 1)
         self.assertEqual(self.brakes.target_id , 2)
         self.assertEqual(self.brakes.reason , "emergency")

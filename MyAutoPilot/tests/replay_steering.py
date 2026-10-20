@@ -15,7 +15,8 @@ def replay(records , speed_kmh = 45):
     for record in records:
         data = record["data"]
         speed = data.get("telemetry" , {}).get("speed_kmh" , speed_kmh)
-        previous = Steering.steering(data["center_points"] , data["y_far"] , 3 , previous ,
+        path_points = data.get("path_points" , data["center_points"])
+        previous = Steering.steering(path_points , data["y_far"] , 3 , previous ,
                                      speed_kmh = speed , timestamp = record["timestamp"] , y_near = data["y_near"])
         output.append(previous)
     return np.asarray(output)

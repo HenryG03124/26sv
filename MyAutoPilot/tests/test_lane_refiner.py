@@ -1,11 +1,85 @@
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
+from MyAutoPilot.auto_brakes import AutoBrakes
 from MyAutoPilot.lane_refiner import LaneRefiner
 
 
 class LaneRefinerTests(unittest.TestCase):
+    def test_lanes_are_unavailable_before_first_frame(self):
+        refiner = LaneRefiner(200 , 320 , 10 , 200 , 248)
+        self.assertEqual(refiner.lane_available , {"current": False , "L": False , "R": False})
+
+    def test_missing_boundaries_reset_each_lane_available(self):
+        cases = [
+            ([100] , {"current": True , "L": False , "R": True}) ,
+            ([540] , {"current": True , "L": True , "R": False}) ,
+            ([100 , 220] , {"current": False , "L": False , "R": True}) ,
+            ([420 , 540] , {"current": False , "L": True , "R": False}) ,
+            ([100 , 220 , 420 , 540] , {"current": False , "L": False , "R": False})
+        ]
+        for missing_x_values , expected in cases:
+            with self.subTest(missing_x_values = missing_x_values):
+                refiner = LaneRefiner(200 , 320 , 10 , 200 , 248)
+                mask = np.zeros((352 , 640) , dtype = np.uint8)
+                for x in (100 , 220 , 420 , 540):
+                    mask[200 : 321 , x] = 3
+                refiner.refine(mask , 2 , 10 , 30)
+                self.assertEqual(refiner.lane_available , {"current": True , "L": True , "R": True})
+
+                for x in missing_x_values:
+                    mask[: , x] = 0
+                refiner.refine(mask , 2 , 10 , 30 , return_sample = True)
+                self.assertEqual(refiner.lane_available , expected)
+
+    def test_neighbour_lanes_must_cover_far_target(self):
+        refiner = LaneRefiner(200 , 320 , 10 , 260 , 300)
+        mask = np.zeros((352 , 640) , dtype = np.uint8)
+        for x in (100 , 220 , 420 , 540):
+            mask[200 : 321 , x] = 3
+        _ , _ , nl_lane_points , nr_lane_points = refiner.refine(mask , 2 , 10 , 30)
+        self.assertTrue(nl_lane_points)
+        self.assertTrue(nr_lane_points)
+        self.assertEqual(refiner.lane_available , {"current": True , "L": False , "R": False})
+
+    def test_crossed_fitted_boundaries_are_unavailable(self):
+        refiner = LaneRefiner(200 , 320 , 10 , 200 , 248)
+        mask = np.zeros((352 , 640) , dtype = np.uint8)
+        cases = [
+            ([[220 , 200] , [430 , 248]] , [[420 , 200] , [420 , 248]] , [[100 , 200] , [100 , 248]] , [[540 , 200] , [540 , 248]] , {"current": False , "L": True , "R": True}) ,
+            ([[220 , 200] , [220 , 248]] , [[420 , 200] , [420 , 248]] , [[100 , 200] , [220 , 248]] , [[540 , 200] , [540 , 248]] , {"current": True , "L": False , "R": True}) ,
+            ([[220 , 200] , [220 , 248]] , [[420 , 200] , [420 , 248]] , [[100 , 200] , [100 , 248]] , [[540 , 200] , [400 , 248]] , {"current": True , "L": True , "R": False})
+        ]
+        for cl_lane_points , cr_lane_points , nl_lane_points , nr_lane_points , expected in cases:
+            with self.subTest(expected = expected):
+                with patch.object(refiner , "fit_lane_points" , side_effect = [cl_lane_points , cr_lane_points , nl_lane_points , nr_lane_points]):
+                    refiner.refine(mask , 2 , 10 , 30)
+                self.assertEqual(refiner.lane_available , expected)
+
+    def test_cached_width_and_brake_lanes_do_not_restore_available(self):
+        refiner = LaneRefiner(200 , 320 , 10 , 200 , 248)
+        brakes = AutoBrakes()
+        mask = np.zeros((352 , 640) , dtype = np.uint8)
+        mask[200 : 321 , 220] = 3
+        mask[200 : 321 , 420] = 3
+        for frame in range(5):
+            cl_lane_points , cr_lane_points , _ , _ = refiner.refine(mask , 2 , 10 , 30)
+            refiner.calculate_center_points(cl_lane_points , cr_lane_points)
+            brakes.update_lanes(cl_lane_points , cr_lane_points , frame * 0.1 , refiner.lane_available["current"])
+
+        mask[: , 220] = 0
+        cl_lane_points , cr_lane_points , _ , _ = refiner.refine(mask , 2 , 10 , 30)
+        center_points = refiner.calculate_center_points(cl_lane_points , cr_lane_points)
+        brakes.update_lanes(cl_lane_points , cr_lane_points , 0.5 , refiner.lane_available["current"])
+        self.assertTrue(center_points)
+        self.assertTrue(refiner.prev_lane_width)
+        self.assertEqual(brakes.lane_status , "held")
+        self.assertTrue(brakes.cl_lane_points)
+        self.assertFalse(refiner.lane_available["current"])
+        self.assertFalse(refiner.lane_available["L"])
+
     def test_width_updates_after_five_tracking_frames(self):
         refiner = LaneRefiner(200 , 320 , 10 , 200 , 248)
         mask = np.zeros((352 , 640) , dtype = np.uint8)

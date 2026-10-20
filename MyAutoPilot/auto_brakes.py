@@ -29,8 +29,8 @@ class AutoBrakes():
         self.lane_status = "missing"
         self.reason = "none"
 
-    def update_lanes(self , cl_lane_points , cr_lane_points , timestamp):
-        if len(cl_lane_points) >= 2 and len(cr_lane_points) >= 2:
+    def update_lanes(self , cl_lane_points , cr_lane_points , timestamp , lane_available):
+        if lane_available:
             self.cl_lane_points = sorted(cl_lane_points , key = lambda point: point[1]) #sort by y
             self.cr_lane_points = sorted(cr_lane_points , key = lambda point: point[1])
             self.last_lane_time = timestamp
@@ -86,8 +86,8 @@ class AutoBrakes():
 
         return float(heights[-1] / height_rate)
 
-    def brake(self , cl_lane_points , cr_lane_points , trackings , timestamp , height , width):
-        self.update_lanes(cl_lane_points , cr_lane_points , timestamp)
+    def brake(self , cl_lane_points , cr_lane_points , trackings , timestamp , height , width , lane_available):
+        self.update_lanes(cl_lane_points , cr_lane_points , timestamp , lane_available)
         active_ids = {track_id for track_id , tracking in trackings.items() if tracking["status"] == "tracked"}
         self.histories = {track_id: history for track_id , history in self.histories.items() if track_id in active_ids}
         self.risk_since = {track_id: start for track_id , start in self.risk_since.items() if track_id in active_ids}

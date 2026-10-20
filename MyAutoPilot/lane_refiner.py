@@ -11,6 +11,7 @@ class LaneRefiner():
         self.lane_center = width // 2
         self.avalible_points = {"CL" : 0 , "CR" : 0 , "NL" : 0 , "NR" : 0}
         self.status = {"CL" : "tracking" , "CR" : "tracking" , "NL" : "tracking" , "NR" : "tracking" , "center" : "accurate"}
+        self.lane_available = {"current": False , "L": False , "R": False}
         self.current_y_far = current_y_far
         self.current_y_near = current_y_near
         self.lane_x_diff = lane_x_diff
@@ -238,6 +239,17 @@ class LaneRefiner():
         cr_lane_points = self.fit_lane_points(cr_lane_sample_points , height , width , degree , "CR")
         nl_lane_points = self.fit_lane_points(nl_lane_sample_points , height , width , degree , "NL")
         nr_lane_points = self.fit_lane_points(nr_lane_sample_points , height , width , degree , "NR")
+
+        cl_lane_yxdict = {y : x for x , y in cl_lane_points}
+        cr_lane_yxdict = {y : x for x , y in cr_lane_points}
+        nl_lane_yxdict = {y : x for x , y in nl_lane_points}
+        nr_lane_yxdict = {y : x for x , y in nr_lane_points}
+        current_y_values = cl_lane_yxdict.keys() & cr_lane_yxdict.keys()
+        left_y_values = cl_lane_yxdict.keys() & nl_lane_yxdict.keys()
+        right_y_values = cr_lane_yxdict.keys() & nr_lane_yxdict.keys()
+        self.lane_available["current"] = len(current_y_values) >= 2 and all(0 <= cl_lane_yxdict[y] < cr_lane_yxdict[y] < width for y in current_y_values)
+        self.lane_available["L"] = self.current_y_far in left_y_values and all(0 <= nl_lane_yxdict[y] < cl_lane_yxdict[y] < width for y in left_y_values)
+        self.lane_available["R"] = self.current_y_far in right_y_values and all(0 <= cr_lane_yxdict[y] < nr_lane_yxdict[y] < width for y in right_y_values)
 
         if cl_lane_points and cr_lane_points and self.status["CL"] == "tracking" and self.status["CR"] == "tracking":
             self.tracking_frames += 1

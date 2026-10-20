@@ -74,7 +74,7 @@ def main():
             center = refiner.calculate_center_points(cl_lane_points , cr_lane_points)
             mark("refiner")
             previous = Steering.steering(center , 188 , 3 , previous , telemetry["speed_kmh"] , timestamp , 292)
-            brake = brakes.brake(cl_lane_points , cr_lane_points , trackings , timestamp , 352 , 640)
+            brake = brakes.brake(cl_lane_points , cr_lane_points , trackings , timestamp , 352 , 640 , refiner.lane_available["current"])
             mark("steering_brake")
             display = cv2.resize(frame , (640 , 352))
             lane_mask = np.zeros_like(mask)

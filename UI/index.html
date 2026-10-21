@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="description" content="26SV 自动驾驶感知画面、路径规划与车辆运行状态。">
+    <title>26SV · 驾驶感知控制台</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
+</head>
+<body>
+    <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+        <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4M7 11h3l2-4 2 7 2-3h2"/></symbol>
+        <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6M12 7v5l3 2"/></symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+        <symbol id="i-expand" viewBox="0 0 24 24"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></symbol>
+        <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></symbol>
+        <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" stroke="none"/></symbol>
+        <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></symbol>
+        <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></symbol>
+        <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
+        <symbol id="i-camera" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="m8 6 2-3h4l2 3"/><circle cx="12" cy="13" r="4"/></symbol>
+        <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 10 5-10 5L2 8l10-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></symbol>
+        <symbol id="i-car" viewBox="0 0 24 24"><path d="m5 8 2-5h10l2 5M3 9h18v10H3zM6 19v2m12-2v2M6 13h3m6 0h3"/></symbol>
+    </svg>
+
+    <aside class="rail">
+        <a class="brand" href="./" aria-label="26SV 首页">26<span>SV</span></a>
+        <div class="rail-line"></div>
+        <button class="rail-button active" id="nav-monitor" title="感知监控" aria-label="感知监控" aria-pressed="true"><svg><use href="#i-monitor"/></svg></button>
+        <button class="rail-button" id="nav-replay" title="日志回放" aria-label="日志回放" aria-pressed="false"><svg><use href="#i-history"/></svg></button>
+        <div class="rail-bottom"><span class="local-dot"></span><span>LOCAL</span><span class="rail-version">V.01</span></div>
+    </aside>
+
+    <div class="workspace">
+        <header class="topbar">
+            <div class="breadcrumb"><span>26SV PROJECT</span><span class="slash">/</span><strong>驾驶感知控制台</strong></div>
+            <div class="top-actions"><span class="readonly"><span></span>只读监控</span><button class="text-button theme-toggle" id="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><svg><use href="#i-theme"/></svg><span id="theme-label">深色</span></button><button class="text-button" id="help-button"><svg><use href="#i-info"/></svg>接入说明</button></div>
+        </header>
+
+        <main>
+            <section class="page-heading">
+                <div><div class="eyebrow">26SV / AUTONOMOUS DRIVING</div><h1>驾驶感知</h1><p>道路、路径与车辆状态，一目了然。</p></div>
+                <div class="connection-block"><span class="status-badge" id="connection-status" role="status"><i></i>正在连接</span><span id="last-update">等待本地数据源</span></div>
+            </section>
+
+            <section class="source-bar" aria-label="数据源">
+                <div class="source-label"><svg><use href="#i-layers"/></svg><span>数据源</span></div>
+                <select id="log-select" aria-label="选择实时数据或历史日志"><option value="latest">自动跟随最新日志</option></select>
+                <span class="source-detail" id="source-detail">MyAutoPilot / logs</span>
+                <button class="text-button export-button" id="export-button" disabled><svg><use href="#i-download"/></svg>导出当前帧</button>
+            </section>
+
+            <div class="dashboard">
+                <section class="panel perception-panel" id="perception-panel">
+                    <div class="panel-heading"><div><span class="section-number">01</span><h2>环境感知</h2><span class="section-en">PERCEPTION</span></div><button class="icon-button" id="fullscreen-button" title="全屏查看感知画面" aria-label="全屏查看感知画面"><svg><use href="#i-expand"/></svg></button></div>
+                    <div class="view-toolbar">
+                        <div class="segmented" role="group" aria-label="感知视图"><button class="selected" id="geometry-tab" aria-pressed="true">感知结构</button><button id="camera-tab" aria-pressed="false">实时画面</button></div>
+                        <span class="frame-label" id="frame-label">FRAME —</span>
+                    </div>
+                    <div class="viewport" id="viewport">
+                        <canvas id="perception-canvas" width="1280" height="704" aria-label="感知结构：日志中的车道、路径与目标检测框"></canvas>
+                        <img id="camera-image" alt="Result 窗口实时感知画面" hidden>
+                        <div class="viewport-top"><span class="viewport-tag" id="viewport-tag"><i></i>LOG GEOMETRY</span><span id="resolution-label">640 × 352</span></div>
+                        <div class="view-empty" id="view-empty" hidden><div class="empty-icon"><svg><use href="#i-camera"/></svg></div><h3 id="empty-title">等待感知数据</h3><p id="empty-description">运行原有自动驾驶程序后，这里会显示感知结果。</p></div>
+                        <div class="viewport-bottom"><span id="view-caption">感知示意 · 原始图像坐标</span><span class="axis-label">PERCEPTION VIEW</span></div>
+                    </div>
+                    <div class="overlay-bar" id="overlay-bar"><span class="muted">显示图层</span><label><input type="checkbox" id="show-lanes" checked><span class="legend-line lane"></span>车道边界</label><label><input type="checkbox" id="show-path" checked><span class="legend-line path"></span>规划路径</label><label><input type="checkbox" id="show-objects" checked><span class="legend-box"></span>检测目标</label></div>
+                    <div class="playback">
+                        <button class="play-button" id="play-button" type="button" aria-label="暂停显示" title="暂停显示"><svg aria-hidden="true"><use id="play-icon" href="#i-pause"/></svg></button>
+                        <div class="timeline"><div class="timeline-meta"><span id="playback-label">跟随最新日志</span><span id="elapsed-label">00:00.0</span></div><input type="range" id="timeline" min="0" max="0" value="0" aria-label="回放帧位置" disabled></div>
+                        <select id="playback-speed" aria-label="回放速度" title="回放速度" disabled><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+                    </div>
+                </section>
+
+                <aside class="panel vehicle-panel">
+                    <div class="panel-heading"><div><span class="section-number">02</span><h2>车辆状态</h2></div><span class="small-badge" id="telemetry-badge">等待遥测</span></div>
+                    <div class="speed-display">
+                        <svg class="speed-gauge" viewBox="0 0 240 145" aria-hidden="true"><path class="gauge-track" d="M28 126a94 94 0 1 1 184 0" pathLength="100"/><path class="gauge-fill" id="speed-arc" d="M28 126a94 94 0 1 1 184 0" pathLength="100"/><path class="gauge-ticks" d="m33 105-7-2m22-37-6-4m35-25-3-7m46 0v-8m43 15 3-7m31 36 6-4m4 43 7-2"/></svg>
+                        <div class="speed-value"><strong id="speed-value">—</strong><span>km/h</span></div>
+                        <div class="gauge-labels"><span>0</span><span>车速</span><span>120</span></div>
+                    </div>
+                    <div class="vehicle-meta"><div><span>挡位</span><strong id="gear-value">—</strong></div><div><span>引擎转速</span><strong id="rpm-value">— <small>rpm</small></strong></div><div><span>感知帧率</span><strong id="fps-value">— <small>fps</small></strong></div></div>
+                    <div class="control-heading"><h3>控制输出</h3><span id="control-badge">—</span></div>
+                    <div class="steering-row"><div class="steering-wheel" id="steering-wheel"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16"/><circle cx="20" cy="20" r="4"/><path d="m5 15 11 4m8 0 11-4M20 24v12"/></svg></div><div class="steering-detail"><div><span>转向</span><strong id="steering-value">—</strong></div><div class="steering-track"><span id="steering-marker"></span></div><div class="steering-labels"><span>L</span><span>R</span></div></div></div>
+                    <div class="control-meter"><div><span><i class="meter-dot throttle"></i>油门</span><strong id="throttle-value">—</strong></div><div class="meter-track"><span class="throttle" id="throttle-fill"></span></div></div>
+                    <div class="control-meter"><div><span><i class="meter-dot brake"></i>刹车</span><strong id="brake-value">—</strong></div><div class="meter-track"><span class="brake" id="brake-fill"></span></div></div>
+                    <div class="control-note">记录原程序的控制指令 · 转向正值为右</div>
+                </aside>
+
+                <section class="panel planning-panel">
+                    <div class="panel-heading"><div><span class="section-number">03</span><h2>路径与车道</h2></div><span class="accent-text" id="priority-value">—</span></div>
+                    <div class="lane-cards"><div id="lane-left"><span>左侧车道</span><svg viewBox="0 0 64 52"><path d="M14 47 25 5M47 47 39 5" class="lane-road"/><path d="M31 39V19m-7 7 7-7 7 7"/></svg><strong>—</strong></div><div id="lane-current"><span>当前车道</span><svg viewBox="0 0 64 52"><path d="M14 47 25 5M50 47 39 5" class="lane-road"/><rect x="25" y="23" width="14" height="22" rx="4"/><path d="M28 29h8m-8 10h8"/></svg><strong>—</strong></div><div id="lane-right"><span>右侧车道</span><svg viewBox="0 0 64 52"><path d="M17 47 25 5M50 47 39 5" class="lane-road"/><path d="M33 39V19m-7 7 7-7 7 7"/></svg><strong>—</strong></div></div>
+                    <div class="planning-summary"><span>左换道 <b id="change-left">—</b></span><span>右换道 <b id="change-right">—</b></span><span>路径点 <b id="path-count">—</b></span></div>
+                </section>
+
+                <section class="panel targets-panel">
+                    <div class="panel-heading"><div><span class="section-number">04</span><h2>目标追踪</h2></div><span class="count-badge" id="target-count">0</span></div>
+                    <div class="target-table-wrap"><table><thead><tr><th>目标 / ID</th><th>置信度</th><th>相对运动</th><th>状态</th></tr></thead><tbody id="target-list"><tr><td colspan="4" class="table-empty">等待目标数据</td></tr></tbody></table></div>
+                    <div class="target-footer"><span>制动目标 <b id="brake-target">—</b></span><span>视觉 TTC <b id="ttc-value">—</b></span></div>
+                </section>
+
+                <section class="panel diagnostics-panel">
+                    <div class="panel-heading"><div><span class="section-number">05</span><h2>运行诊断</h2></div><span class="diagnostic-dot"></span></div>
+                    <dl class="diagnostics-list"><div><dt>数据状态</dt><dd id="data-state">等待连接</dd></div><div><dt>车道识别</dt><dd id="lane-status">—</dd></div><div><dt>制动原因</dt><dd id="brake-reason">—</dd></div><div><dt>换道方向</dt><dd id="change-direction">—</dd></div></dl>
+                    <div class="notice" id="status-notice"><svg><use href="#i-info"/></svg><p>读取本地运行日志，不向车辆发送控制指令。</p></div>
+                </section>
+            </div>
+            <footer><span><i></i>26SV / PERCEPTION · PLANNING · CONTROL</span><span id="footer-source">本地只读数据 · 等待连接</span></footer>
+        </main>
+    </div>
+
+    <dialog id="help-dialog"><div class="dialog-heading"><span class="eyebrow">GET CONNECTED</span><button class="icon-button" id="close-help" aria-label="关闭接入说明">×</button></div><h2>连接你的驾驶现场</h2><p>此页面通过独立服务读取现有程序的输出。</p><ol><li><strong>启动网页服务</strong><p>在 26sv 根目录运行 <code>python -B -m UI.server</code>，然后访问 <code>http://127.0.0.1:8765</code>。</p></li><li><strong>沿用原来的方式运行 MyAutoPilot</strong><p>页面自动跟随最新日志。停止写入超过 3 秒时，状态标记为历史快照。网页不会启动或控制自动驾驶。</p></li><li><strong>查看感知画面</strong><p>切换到“实时画面”，保持原程序的 <code>Result</code> 窗口可见、未最小化且未被其他窗口遮挡。画面与日志分别采样，并非严格逐帧同步。</p></li><li><strong>回看一次运行</strong><p>从数据源选择历史日志，用进度条、播放和倍速查看过程。日志只含车道、路径和检测框等数据，不含历史相机画面。</p></li></ol><div class="dialog-note">“车道可用 / 换道可用”来自原程序判定，不代表完整的侧后方安全检查。</div><button class="primary-button" id="got-it">开始查看<svg><use href="#i-arrow"/></svg></button></dialog>
+    <div class="toast" id="toast" role="status" hidden></div>
+</body>
+</html>

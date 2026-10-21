@@ -19,11 +19,13 @@ class MainPipelineTests(unittest.TestCase):
                                 "auto_brakes" , "throttle" , "logger" , "scs_telemetry")}
         controller = Mock()
         aliases["input_controller"] = types.SimpleNamespace(InputController = Mock(return_value = controller))
+        aliases["auto_config"] = types.SimpleNamespace(auto_config = Mock())
         spec = importlib.util.spec_from_file_location("main_pipeline_under_test" , Path(__file__).resolve().parents[1] / "main.py")
         module = importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules , aliases):
             sys.modules["route_planner"] = importlib.import_module("MyAutoPilot.route_planner")
             spec.loader.exec_module(module)
+        module.autoconfig = "enable"
 
         mask = np.zeros((352 , 640) , dtype = np.uint8)
         for y in range(module.current_y_far , module.current_y_near + 1):
@@ -95,6 +97,7 @@ class MainPipelineTests(unittest.TestCase):
                 module.main()
         finally:
             module.Steering.reset()
+        aliases["auto_config"].auto_config.assert_called_once_with(module.controls_path)
         self.assertEqual(len(records) , frame_count)
         self.assertEqual(capture.capture_window.call_count , frame_count)
         self.assertEqual(movement.update.call_count , frame_count)
@@ -174,11 +177,13 @@ class MainPipelineTests(unittest.TestCase):
                                 "auto_brakes" , "throttle" , "logger" , "scs_telemetry")}
         controller = Mock()
         aliases["input_controller"] = types.SimpleNamespace(InputController = Mock(return_value = controller))
+        aliases["auto_config"] = types.SimpleNamespace(auto_config = Mock())
         spec = importlib.util.spec_from_file_location("main_lane_change_under_test" , Path(__file__).resolve().parents[1] / "main.py")
         module = importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules , aliases):
             sys.modules["route_planner"] = importlib.import_module("MyAutoPilot.route_planner")
             spec.loader.exec_module(module)
+        module.autoconfig = "disable"
 
         keys = [(True , True) , (False , False) , (True , False) , (True , False) ,
                 (True , False) , (True , False) , (False , False) , (True , False) ,
@@ -271,6 +276,7 @@ class MainPipelineTests(unittest.TestCase):
         finally:
             module.Steering.reset()
 
+        aliases["auto_config"].auto_config.assert_not_called()
         keyboard.assert_called_once_with("user32" , use_last_error = True)
         self.assertEqual(user32.GetAsyncKeyState.argtypes , [module.ctypes.c_int])
         self.assertEqual(user32.GetAsyncKeyState.restype , module.ctypes.c_short)

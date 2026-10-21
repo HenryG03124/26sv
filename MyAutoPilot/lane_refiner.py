@@ -6,6 +6,7 @@ init_y_window = 80 #px
 width = 640 #px
 max_center_diff_bottom = 20 #px
 
+#points: list[list[x , y] , list[x , y] , ...]
 class LaneRefiner():
     def __init__(self , current_y_far , current_y_near , lane_x_diff , neighbour_y_far , neighbour_y_near):
         self.lane_center = width // 2
@@ -36,7 +37,7 @@ class LaneRefiner():
         common_y_values = sorted(cl_lane_yxdict.keys() & cr_lane_yxdict.keys() , reverse = True)
         self.prev_lane_width = [[cr_lane_yxdict[y] - cl_lane_yxdict[y] , y] for y in common_y_values]
 
-    def sgl_lane_smapling(self , lane_x_indices , index , sides , sgl_lane_x_offset , min_neighbour_diff):
+    def sgl_lane_smapling(self , lane_x_indices , index , sides , sgl_lane_x_offset , min_neighbour_diff): #on single y value
         if sides == "L":
             lane_x_indices = np.flip(lane_x_indices)
 
@@ -57,7 +58,7 @@ class LaneRefiner():
         if len(output) == 1:
             output.append([])
 
-        return np.asarray(output[index] , dtype = np.float64)
+        return np.asarray(output[index] , dtype = np.float64) #index = 0: current , index = 1: current
 
     def initialize_sampling(self , points , sides , min_support_rows = 4 , init_x_diff = 4 , min_y_diff = 12):
         if len(points) < min_support_rows:

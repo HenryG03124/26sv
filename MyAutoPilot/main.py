@@ -14,6 +14,7 @@ from steering import Steering
 from auto_brakes import AutoBrakes
 from throttle import Throttle
 from input_controller import InputController
+from auto_config import auto_config
 from logger import Logger
 from scs_telemetry import SCSTelemetry
 
@@ -52,7 +53,15 @@ scale = 1
 # Control output
 control = "enable"
 
+# ETS2 controls
+autoconfig = "disable"
+controls_path = r"C:\Users\HenryGuo\OneDrive\文档\Euro Truck Simulator 2\steam_profiles\6A68656E727967756F\controls.sii"
+
 def main():
+    # ETS2 controls
+    if autoconfig == "enable":
+        auto_config(controls_path)
+
     # Runtime state
     steering = 0
     steering_prev = 0

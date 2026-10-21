@@ -278,6 +278,5 @@ class Steering():
         return float(steering_prev + np.clip(steering_raw - steering_prev , -rate * dt , rate * dt))
 
     def steering_pure_pursuit(center_points , y_far , y_near , steering_prev):
-        # Compatibility entry point; the old uncalibrated pure-pursuit formula is retired.
         points = [[x , y] for x , y in center_points if y_far <= y <= y_near]
         return Steering.steering(points , y_far , 3 , steering_prev)

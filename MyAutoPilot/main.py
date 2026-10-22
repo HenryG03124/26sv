@@ -91,6 +91,7 @@ def main():
     # Planning and control
     lane_refiner = LaneRefiner(current_y_far , current_y_near , lane_x_diff , neighbour_y_far , neighbour_y_near)
     route_planner = RoutePlanner(current_y_far , current_y_near , lane_change_diff)
+    steering_controller = Steering()
     auto_brakes = AutoBrakes()
     throttle_controller = Throttle()
     input_controller = InputController()
@@ -183,7 +184,7 @@ def main():
             Draw.draw_road_center(display_frame , path_points , current_y_far , current_y_near)
 
             # Steering
-            steering = Steering.steering(path_points , current_y_far , K_steering , steering_prev , speed_kmh = telemetry["speed_kmh"] , timestamp = timestamp , y_near = current_y_near)
+            steering = steering_controller.steering(path_points , current_y_far , K_steering , steering_prev , speed_kmh = telemetry["speed_kmh"] , timestamp = timestamp , y_near = current_y_near)
 
             steering_prev = steering
 
@@ -234,7 +235,7 @@ def main():
                 "trackings": trackings ,
                 "steering": steering ,
                 "control_timestamp": control_timestamp ,
-                "steering_debug": Steering.diagnostics ,
+                "steering_debug": steering_controller.diagnostics ,
                 "telemetry": telemetry ,
                 "target_speed": target_speed ,
                 "fps": fps ,

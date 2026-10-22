@@ -75,13 +75,13 @@ class MainPipelineTests(unittest.TestCase):
             available_states.append(lane_change_available.copy())
 
         logger.write.side_effect = write
-        module.Steering.reset()
+        steering_controller = module.Steering()
         try:
             with ExitStack() as stack:
                 for name , value in (("ScreenCapture" , capture) , ("PixelClassifierV2" , classifier) ,
                                      ("ObjectDetectorLite" , detector) , ("MovDetector" , movement) ,
                                      ("Logger" , logger) , ("SCSTelemetry" , telemetry) ,
-                                     ("AutoBrakes" , auto_brakes)):
+                                     ("AutoBrakes" , auto_brakes) , ("Steering" , steering_controller)):
                     stack.enter_context(patch.object(module , name , return_value = value))
                 stack.enter_context(patch.object(module.ctypes , "WinDLL" , return_value = user32 , create = True))
                 stack.enter_context(patch.object(module.cv2 , "imshow"))
@@ -96,7 +96,7 @@ class MainPipelineTests(unittest.TestCase):
                 available = stack.enter_context(patch.object(module.Draw , "show_available" , side_effect = show_available))
                 module.main()
         finally:
-            module.Steering.reset()
+            steering_controller.reset()
         aliases["auto_config"].auto_config.assert_called_once_with(module.controls_path)
         self.assertEqual(len(records) , frame_count)
         self.assertEqual(capture.capture_window.call_count , frame_count)
@@ -261,13 +261,14 @@ class MainPipelineTests(unittest.TestCase):
             available_states.append(lane_change_available.copy())
 
         logger.write.side_effect = write
-        module.Steering.reset()
+        steering_controller = module.Steering()
         try:
             with ExitStack() as stack:
                 for name , value in (("ScreenCapture" , capture) , ("PixelClassifierV2" , classifier) ,
                                      ("ObjectDetectorLite" , detector) , ("MovDetector" , movement) ,
                                      ("Logger" , logger) , ("SCSTelemetry" , telemetry) ,
-                                     ("LaneRefiner" , refiner) , ("RoutePlanner" , planner)):
+                                     ("LaneRefiner" , refiner) , ("RoutePlanner" , planner) ,
+                                     ("Steering" , steering_controller)):
                     stack.enter_context(patch.object(module , name , return_value = value))
                 keyboard = stack.enter_context(patch.object(module.ctypes , "WinDLL" , return_value = user32 , create = True))
                 stack.enter_context(patch.object(module.cv2 , "imshow"))
@@ -279,11 +280,11 @@ class MainPipelineTests(unittest.TestCase):
                 request = stack.enter_context(patch.object(planner.lane_change , "request" , wraps = planner.lane_change.request))
                 draw = stack.enter_context(patch.object(module.Draw , "draw_road_center" , wraps = module.Draw.draw_road_center))
                 available = stack.enter_context(patch.object(module.Draw , "show_available" , side_effect = show_available))
-                steering = stack.enter_context(patch.object(module.Steering , "steering" , wraps = module.Steering.steering))
+                steering = stack.enter_context(patch.object(steering_controller , "steering" , wraps = steering_controller.steering))
                 target = stack.enter_context(patch.object(module.Draw , "show_target_speed"))
                 module.main()
         finally:
-            module.Steering.reset()
+            steering_controller.reset()
 
         aliases["auto_config"].auto_config.assert_not_called()
         keyboard.assert_called_once_with("user32" , use_last_error = True)

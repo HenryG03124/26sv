@@ -9,15 +9,15 @@ from MyAutoPilot.steering import Steering
 
 
 def replay(records , speed_kmh = 45):
-    Steering.reset()
+    steering_controller = Steering()
     previous = 0
     output = []
     for record in records:
         data = record["data"]
         speed = data.get("telemetry" , {}).get("speed_kmh" , speed_kmh)
         path_points = data.get("path_points" , data["center_points"])
-        previous = Steering.steering(path_points , data["y_far"] , 3 , previous ,
-                                     speed_kmh = speed , timestamp = record["timestamp"] , y_near = data["y_near"])
+        previous = steering_controller.steering(path_points , data["y_far"] , 3 , previous ,
+                                               speed_kmh = speed , timestamp = record["timestamp"] , y_near = data["y_near"])
         output.append(previous)
     return np.asarray(output)
 

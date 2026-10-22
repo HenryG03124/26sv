@@ -20,8 +20,8 @@ class RoutePlannerTests(unittest.TestCase):
         self.nl_lane_points = [[120 , y] for y in range(200 , 249)]
         self.nr_lane_points = [[520 , y] for y in range(200 , 249)]
         self.lane_available = {"current": True , "L": True , "R": True}
-        Steering.reset()
-        self.addCleanup(Steering.reset)
+        self.steering_controller = Steering()
+        self.addCleanup(self.steering_controller.reset)
 
     def update(self , direction = None):
         return self.planner.update(self.center_points , self.cl_lane_points , self.cr_lane_points ,
@@ -136,18 +136,18 @@ class RoutePlannerTests(unittest.TestCase):
         for direction , sign in (("L" , -1) , ("R" , 1)):
             with self.subTest(direction = direction):
                 self.planner = RoutePlanner(200 , 320 , 40)
-                Steering.reset()
-                previous = Steering.steering(self.center_points , 200 , 3 , 0 ,
-                                             speed_kmh = 45 , timestamp = 0 , y_near = 320)
+                self.steering_controller.reset()
+                previous = self.steering_controller.steering(self.center_points , 200 , 3 , 0 ,
+                                                             speed_kmh = 45 , timestamp = 0 , y_near = 320)
                 accepted = False
                 for frame in range(1 , 11):
                     path = self.update(direction if frame == 1 else None)
-                    self.assertTrue(Steering.existence_filter(path , 200 , 320))
-                    previous = Steering.steering(path , 200 , 3 , previous ,
-                                                 speed_kmh = 45 , timestamp = frame / 10 , y_near = 320)
-                    accepted |= Steering.diagnostics.get("path_reacquired" , False)
+                    self.assertTrue(self.steering_controller.existence_filter(path , 200 , 320))
+                    previous = self.steering_controller.steering(path , 200 , 3 , previous ,
+                                                                 speed_kmh = 45 , timestamp = frame / 10 , y_near = 320)
+                    accepted |= self.steering_controller.diagnostics.get("path_reacquired" , False)
                 self.assertTrue(accepted)
-                self.assertEqual(Steering.diagnostics["status"] , "tracking")
+                self.assertEqual(self.steering_controller.diagnostics["status"] , "tracking")
                 self.assertGreater(previous * sign , 0)
 
 

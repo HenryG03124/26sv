@@ -10,6 +10,21 @@ from MyAutoPilot.throttle import Throttle
 
 
 class ThrottleTests(unittest.TestCase):
+    def test_updated_target_changes_throttle(self):
+        controller = Throttle()
+        telemetry = {"status": "ok" , "speed_kmh": 50}
+        self.assertEqual(controller.get_target() , 50)
+        self.assertEqual(controller.throttle(telemetry , 5 , 0 , 0) , 0)
+        controller.update_target("up")
+        self.assertEqual(controller.get_target() , 55)
+        self.assertAlmostEqual(controller.throttle(telemetry , 5 , 0 , 0) , 0.5)
+        controller.update_target("down")
+        self.assertEqual(controller.get_target() , 50)
+        self.assertEqual(controller.throttle(telemetry , 5 , 0 , 0) , 0)
+        controller.update_target("down")
+        self.assertEqual(controller.get_target() , 45)
+        self.assertEqual(controller.throttle(telemetry , 5 , 0 , 0) , 0)
+
     def test_fifth_tracking_frame_enables_throttle(self):
         controller = Throttle()
         telemetry = {"status": "ok" , "speed_kmh": 20}

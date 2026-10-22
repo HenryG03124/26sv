@@ -276,7 +276,3 @@ class Steering():
             return math.copysign(min(abs(steering_raw) , steering_rate * (dt - neutral_time)) , steering_raw)
         rate = return_rate if abs(steering_raw) < abs(steering_prev) else steering_rate
         return float(steering_prev + np.clip(steering_raw - steering_prev , -rate * dt , rate * dt))
-
-    def steering_pure_pursuit(center_points , y_far , y_near , steering_prev):
-        points = [[x , y] for x , y in center_points if y_far <= y <= y_near]
-        return Steering.steering(points , y_far , 3 , steering_prev)

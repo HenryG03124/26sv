@@ -6,7 +6,7 @@ class LaneChange():
         self.y_near = y_near
         self.diff = diff
         self.direction = None
-        self.should_exit = False
+        self.exiting = False
         self.prev_current_lane = {}
         self.prev_neighbour_lane = {}
 
@@ -15,19 +15,19 @@ class LaneChange():
             return False
 
         self.direction = direction
-        self.should_exit = False
+        self.exiting = False
         self.prev_current_lane = {}
         self.prev_neighbour_lane = {}
         return True
 
     def update(self , current_lane_points , neighbour_lane_points , width):
         if self.direction is None:
-            return [] , self.should_exit
+            return [] , self.exiting
 
         current_lane = {y : x for x , y in current_lane_points}
         neighbour_lane = {y : x for x , y in neighbour_lane_points}
         if self.y_far not in current_lane or self.y_far not in neighbour_lane:
-            self.should_exit = True
+            self.exiting = True
             self.direction = None
             return [] , True
 
@@ -39,7 +39,7 @@ class LaneChange():
         else:
             valid = valid and neighbour_x > current_x
         if not valid:
-            self.should_exit = True
+            self.exiting = True
             self.direction = None
             return [] , True
 
@@ -49,7 +49,7 @@ class LaneChange():
             current_diff = np.median([current_lane[y] - self.prev_current_lane[y] for y in common_y_values])
             neighbour_diff = np.median([neighbour_lane[y] - self.prev_neighbour_lane[y] for y in common_y_values])
             if abs(current_diff) > self.diff and abs(neighbour_diff) > self.diff:
-                self.should_exit = True
+                self.exiting = True
                 self.direction = None
                 return [] , True
 

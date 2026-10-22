@@ -194,6 +194,8 @@ input[type="range"]:disabled { opacity: .35; cursor: default; }
 .speed-value > span { font-size: 13px; color: var(--muted); margin-top: 2px; }
 .gauge-labels { display: flex; justify-content: space-between; color: var(--faint); font: 11px Consolas, monospace; padding: 0 21px; margin-top: -3px; }
 .gauge-labels span:nth-child(2) { font-family: inherit; font-size: 12px; }
+.target-speed { display: flex; align-items: baseline; justify-content: center; gap: 7px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+.target-speed strong { color: var(--text); font: 14px Consolas, monospace; }
 .vehicle-meta { margin: 5px 20px 0; display: grid; grid-template-columns: .55fr 1.1fr 1fr; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 17px 0; gap: 8px; }
 .vehicle-meta div { display: flex; flex-direction: column; gap: 9px; }
 .vehicle-meta div + div { border-left: 1px solid var(--line); padding-left: 12px; }

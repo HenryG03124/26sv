@@ -68,6 +68,8 @@ def main():
     center_tracking_frames = 0
     left_pressed_prev = False
     right_pressed_prev = False
+    up_pressed_prev = False
+    down_pressed_prev = False
 
     # Keyboard input
     user32 = ctypes.WinDLL("user32" , use_last_error = True)
@@ -137,8 +139,19 @@ def main():
             left_pressed_prev = left_pressed
             right_pressed_prev = right_pressed
 
+            # Target speed keys
+            up_pressed = bool(user32.GetAsyncKeyState(0x26) & 0x8000)
+            down_pressed = bool(user32.GetAsyncKeyState(0x28) & 0x8000)
+            if up_pressed and not up_pressed_prev and not down_pressed:
+                throttle_controller.update_target("up")
+            elif down_pressed and not down_pressed_prev and not up_pressed:
+                throttle_controller.update_target("down")
+            up_pressed_prev = up_pressed
+            down_pressed_prev = down_pressed
+            target_speed = throttle_controller.get_target()
+
             # Lane refinement
-            if route_planner.control_priority == "lane_change" or direction is not None:
+            if route_planner.control_priority == "lane change" or direction is not None:
                 lane_refiner.lane_center = mask.shape[1] // 2
             cl_lane_sample_points , cr_lane_sample_points , nl_lane_sample_points , nr_lane_sample_points , cl_lane_points , cr_lane_points , nl_lane_points , nr_lane_points = lane_refiner.refine(mask , degree , sgl_lane_x_offset , min_neighbour_diff , return_sample = True)
             center_points = lane_refiner.calculate_center_points(cl_lane_points , cr_lane_points)
@@ -216,13 +229,14 @@ def main():
                 "control_priority": route_planner.control_priority ,
                 "lane_change_available": route_planner.lane_change_available ,
                 "lane_change_direction": route_planner.lane_change.direction ,
-                "lane_change_should_exit": route_planner.lane_change.should_exit ,
+                "lane_change_exiting": route_planner.lane_change.exiting ,
                 "lane_change_diff": lane_change_diff ,
                 "trackings": trackings ,
                 "steering": steering ,
                 "control_timestamp": control_timestamp ,
                 "steering_debug": Steering.diagnostics ,
                 "telemetry": telemetry ,
+                "target_speed": target_speed ,
                 "fps": fps ,
                 "brake": brake ,
                 "throttle": throttle ,
@@ -252,6 +266,7 @@ def main():
             Draw.show_available(display_frame , route_planner.lane_change_available)
             Draw.show_fps(display_frame , fps)
             Draw.show_speed(display_frame , telemetry)
+            Draw.show_target_speed(display_frame , target_speed)
             Draw.show_throttle(display_frame , throttle)
 
             # Window and exit key

@@ -126,7 +126,7 @@ class MainPipelineTests(unittest.TestCase):
             self.assertEqual(record["path_points"] , record["center_points"])
             self.assertEqual(record["control_priority"] , "center")
             self.assertIsNone(record["lane_change_direction"])
-            self.assertFalse(record["lane_change_should_exit"])
+            self.assertFalse(record["lane_change_exiting"])
             self.assertNotIn("lane_change_completed" , record)
             self.assertEqual(record["lane_change_diff"] , module.lane_change_diff)
             self.assertEqual(record["lane_change_available"] , {side: record["lane_available"][side] for side in ("L" , "R")})
@@ -189,6 +189,11 @@ class MainPipelineTests(unittest.TestCase):
                 (True , False) , (True , False) , (False , False) , (True , False) ,
                 (True , False) , (False , False) , (False , True) , (True , False) ,
                 (False , False) , (True , True) , (False , False) , (True , False)]
+        speed_keys = [(False , False) , (True , False) , (True , False) , (False , False) ,
+                      (True , False) , (False , False) , (False , True) , (False , True) ,
+                      (False , False) , (True , True) , (True , False) , (False , False) ,
+                      (False , True) , (False , False) , (False , True) , (False , False)]
+        target_speeds = [50 , 55 , 55 , 55 , 60 , 60 , 55 , 55 , 55 , 55 , 55 , 55 , 50 , 50 , 45 , 45]
         frame_count = len(keys)
         left_offsets = [0] * 4 + [-35] * 4 + [-70] * 8
         right_offsets = [0] * 12 + [35] * 4
@@ -219,9 +224,11 @@ class MainPipelineTests(unittest.TestCase):
         telemetry.read.return_value = {"status": "ok" , "speed_kmh": 45}
         user32 = Mock()
         key_states = []
-        for left_pressed , right_pressed in keys:
+        for (left_pressed , right_pressed) , (up_pressed , down_pressed) in zip(keys , speed_keys):
             key_states.append(0x8000 if left_pressed else 0)
             key_states.append(0x8000 if right_pressed else 0)
+            key_states.append(0x8000 if up_pressed else 0)
+            key_states.append(0x8000 if down_pressed else 0)
         user32.GetAsyncKeyState.side_effect = key_states
         refiner = Mock()
         refiner.lane_center = 301
@@ -267,11 +274,13 @@ class MainPipelineTests(unittest.TestCase):
                 stack.enter_context(patch.object(module.cv2 , "destroyAllWindows"))
                 stack.enter_context(patch.object(module.cv2 , "waitKey" , side_effect = [-1] * (frame_count - 1) + [ord("q")]))
                 brakes = stack.enter_context(patch.object(module.AutoBrakes , "brake" , return_value = 0.0))
+                stack.enter_context(patch.object(module.time , "monotonic" , side_effect = [10 + index * 0.01 for index in range(frame_count * 2)]))
                 stack.enter_context(patch("builtins.print"))
                 request = stack.enter_context(patch.object(planner.lane_change , "request" , wraps = planner.lane_change.request))
                 draw = stack.enter_context(patch.object(module.Draw , "draw_road_center" , wraps = module.Draw.draw_road_center))
                 available = stack.enter_context(patch.object(module.Draw , "show_available" , side_effect = show_available))
                 steering = stack.enter_context(patch.object(module.Steering , "steering" , wraps = module.Steering.steering))
+                target = stack.enter_context(patch.object(module.Draw , "show_target_speed"))
                 module.main()
         finally:
             module.Steering.reset()
@@ -280,9 +289,15 @@ class MainPipelineTests(unittest.TestCase):
         keyboard.assert_called_once_with("user32" , use_last_error = True)
         self.assertEqual(user32.GetAsyncKeyState.argtypes , [module.ctypes.c_int])
         self.assertEqual(user32.GetAsyncKeyState.restype , module.ctypes.c_short)
-        self.assertEqual([call.args[0] for call in user32.GetAsyncKeyState.call_args_list] , [0x25 , 0x27] * frame_count)
+        self.assertEqual([call.args[0] for call in user32.GetAsyncKeyState.call_args_list] , [0x25 , 0x27 , 0x26 , 0x28] * frame_count)
         self.assertEqual([call.args[0] for call in request.call_args_list] , ["L" , "L" , "R"])
         self.assertEqual(len(records) , frame_count)
+        self.assertEqual([record["target_speed"] for record in records] , target_speeds)
+        self.assertEqual([call.args[1] for call in target.call_args_list] , target_speeds)
+        self.assertEqual(records[4]["throttle"] , 1)
+        self.assertAlmostEqual(records[12]["throttle"] , 0.502)
+        for index , record in enumerate(records):
+            self.assertEqual(controller.throttle_controller.call_args_list[index].args , (record["throttle"] ,))
         self.assertEqual(draw.call_count , frame_count)
         self.assertEqual(available.call_count , frame_count)
         self.assertEqual(steering.call_count , frame_count)
@@ -300,9 +315,9 @@ class MainPipelineTests(unittest.TestCase):
             if index in active_frames:
                 direction = "L" if index < 10 else "R"
                 current , neighbour = (lanes[index][0] , lanes[index][2]) if direction == "L" else (lanes[index][1] , lanes[index][3])
-                self.assertEqual(record["control_priority"] , "lane_change")
+                self.assertEqual(record["control_priority"] , "lane change")
                 self.assertEqual(record["lane_change_direction"] , direction)
-                self.assertFalse(record["lane_change_should_exit"])
+                self.assertFalse(record["lane_change_exiting"])
                 self.assertEqual(record["lane_change_available"] , {"L": False , "R": False})
                 self.assertEqual(record["path_points"][0] , [320 , module.current_y_near])
                 self.assertEqual(record["path_points"][-1] , [(current[0][0] + neighbour[0][0]) / 2 , module.current_y_far])
@@ -313,7 +328,7 @@ class MainPipelineTests(unittest.TestCase):
                 self.assertEqual(record["path_points"] , record["center_points"])
                 self.assertEqual(record["lane_change_available"] , {side: record["lane_available"][side] for side in ("L" , "R")})
         for index in (4 , 8 , 12):
-            self.assertTrue(records[index]["lane_change_should_exit"])
+            self.assertTrue(records[index]["lane_change_exiting"])
         self.assertEqual(records[15]["lane_change_available"] , {"L": False , "R": True})
         self.assertEqual(records[15]["lane_available"] , {"current": True , "L": False , "R": True})
         self.assertEqual(records[15]["control_priority"] , "center")

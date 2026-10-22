@@ -15,15 +15,21 @@ class Draw():
 
     def show_speed(frame , telemetry):
         speed = telemetry["speed_kmh"]
-        text = f"SPEED: {speed:.1f} km/h" if speed is not None else f"SPEED: -- ({telemetry['status']})"
+        text = f"speed: {speed:.1f} km/h" if speed is not None else f"speed: -- ({telemetry['status']})"
         text_width = cv2.getTextSize(text , cv2.FONT_HERSHEY_SIMPLEX , fontScale , 1)[0][0]
         position = (frame.shape[1] - text_width - text_margin , text_top + text_line_height)
+        cv2.putText(frame , text = text , org = position , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = (0 , 255 , 255) , thickness = 1 , lineType = cv2.LINE_AA)
+
+    def show_target_speed(frame , target_speed):
+        text = f"target speed: {target_speed:.1f} km/h"
+        text_width = cv2.getTextSize(text , cv2.FONT_HERSHEY_SIMPLEX , fontScale , 1)[0][0]
+        position = (frame.shape[1] - text_width - text_margin , text_top + 2 * text_line_height)
         cv2.putText(frame , text = text , org = position , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = (0 , 255 , 255) , thickness = 1 , lineType = cv2.LINE_AA)
 
     def show_throttle(frame , throttle):
         text = f"THROTTLE: {throttle:.0%}"
         text_width = cv2.getTextSize(text , cv2.FONT_HERSHEY_SIMPLEX , fontScale , 1)[0][0]
-        position = (frame.shape[1] - text_width - text_margin , text_top + 2 * text_line_height)
+        position = (frame.shape[1] - text_width - text_margin , text_top + 3 * text_line_height)
         cv2.putText(frame , text = text , org = position , fontFace = cv2.FONT_HERSHEY_SIMPLEX , fontScale = fontScale , color = (0 , 255 , 255) , thickness = 1 , lineType = cv2.LINE_AA)
 
     def show_brakes(frame , brake , target_id , ttc , lane_status):

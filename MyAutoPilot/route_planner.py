@@ -12,10 +12,10 @@ class RoutePlanner():
 
         if direction in ("L" , "R") and self.lane_change_available[direction]:
             if self.lane_change.request(direction):
-                self.control_priority = "lane_change"
+                self.control_priority = "lane change"
 
         path_points = center_points
-        if self.control_priority == "lane_change":
+        if self.control_priority == "lane change":
             if self.lane_change.direction == "L":
                 current_lane_points = cl_lane_points
                 neighbour_lane_points = nl_lane_points
@@ -23,8 +23,8 @@ class RoutePlanner():
                 current_lane_points = cr_lane_points
                 neighbour_lane_points = nr_lane_points
 
-            path_points , should_exit = self.lane_change.update(current_lane_points , neighbour_lane_points , width)
-            if should_exit:
+            path_points , exiting = self.lane_change.update(current_lane_points , neighbour_lane_points , width)
+            if exiting:
                 self.control_priority = "center"
                 path_points = center_points
 

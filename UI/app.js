@@ -158,6 +158,7 @@ function render() {
 
     const speed = telemetry.status === "ok" ? telemetry.speed_kmh : null;
     setText("speed-value", number(speed));
+    setText("target-speed-value", number(data.target_speed));
     $("speed-arc").style.strokeDasharray = `${Number.isFinite(speed) ? Math.min(100, Math.max(0, speed / 120 * 100)) : 0} 100`;
     setText("telemetry-badge", telemetryNames[telemetry.status] || "等待遥测");
     $("telemetry-badge").className = `small-badge${telemetry.status === "ok" ? " good" : ""}`;
@@ -173,7 +174,7 @@ function render() {
         $(`${key}-fill`).style.width = `${Number.isFinite(data[key]) ? Math.max(0, Math.min(1, data[key])) * 100 : 0}%`;
     }
 
-    setText("priority-value", data.control_priority === "center" ? "车道居中" : data.control_priority === "lane_change" ? "换道中" : "—");
+    setText("priority-value", data.control_priority === "center" ? "车道居中" : ["lane change", "lane_change"].includes(data.control_priority) ? "lane change" : "—");
     for (const [id, key] of [["lane-left", "L"], ["lane-current", "current"], ["lane-right", "R"]]) {
         const available = data.lane_available?.[key];
         $(id).classList.toggle("available", available === true);

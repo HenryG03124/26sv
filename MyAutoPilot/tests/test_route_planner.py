@@ -43,7 +43,7 @@ class RoutePlannerTests(unittest.TestCase):
                 path = self.update(direction)
                 self.assertEqual(path[0] , [320 , 320])
                 self.assertEqual(path[-1] , [target_x , 200])
-                self.assertEqual(self.planner.control_priority , "lane_change")
+                self.assertEqual(self.planner.control_priority , "lane change")
                 self.assertEqual(self.planner.lane_change.direction , direction)
                 self.assertEqual(self.planner.lane_change_available , {"L": False , "R": False})
 
@@ -51,7 +51,7 @@ class RoutePlannerTests(unittest.TestCase):
         first_path = self.update("L")
         path = self.update("R")
         self.assertEqual(path , first_path)
-        self.assertEqual(self.planner.control_priority , "lane_change")
+        self.assertEqual(self.planner.control_priority , "lane change")
         self.assertEqual(self.planner.lane_change.direction , "L")
 
     def test_completion_returns_center_in_same_frame_without_starting_queued_request(self):
@@ -61,14 +61,14 @@ class RoutePlannerTests(unittest.TestCase):
         path = self.update("R")
         self.assertIs(path , self.center_points)
         self.assertEqual(self.planner.control_priority , "center")
-        self.assertTrue(self.planner.lane_change.should_exit)
+        self.assertTrue(self.planner.lane_change.exiting)
         self.assertIsNone(self.planner.lane_change.direction)
         self.assertEqual(self.planner.lane_change_available , {"L": True , "R": True})
         self.assertIs(self.update() , self.center_points)
         path = self.update("R")
         self.assertEqual(path[-1] , [460 , 200])
-        self.assertEqual(self.planner.control_priority , "lane_change")
-        self.assertFalse(self.planner.lane_change.should_exit)
+        self.assertEqual(self.planner.control_priority , "lane change")
+        self.assertFalse(self.planner.lane_change.exiting)
 
     def test_missing_target_aborts_and_returns_current_center(self):
         self.update("R")
@@ -78,7 +78,7 @@ class RoutePlannerTests(unittest.TestCase):
         path = self.update()
         self.assertIs(path , self.center_points)
         self.assertEqual(self.planner.control_priority , "center")
-        self.assertTrue(self.planner.lane_change.should_exit)
+        self.assertTrue(self.planner.lane_change.exiting)
         self.assertIsNone(self.planner.lane_change.direction)
         self.assertEqual(self.planner.lane_change_available , {"L": True , "R": False})
         self.nr_lane_points = [[520 , y] for y in range(200 , 249)]
@@ -93,7 +93,7 @@ class RoutePlannerTests(unittest.TestCase):
             self.assertIs(self.update("L") , self.center_points)
             request.assert_not_called()
         self.assertEqual(self.planner.control_priority , "center")
-        self.assertFalse(self.planner.lane_change.should_exit)
+        self.assertFalse(self.planner.lane_change.exiting)
         self.assertIsNone(self.planner.lane_change.direction)
 
     def test_unavailable_request_is_not_queued(self):
@@ -127,9 +127,9 @@ class RoutePlannerTests(unittest.TestCase):
         self.lane_available = {"current": False , "L": False , "R": False}
         path = self.update()
         self.assertEqual(path , first_path)
-        self.assertEqual(self.planner.control_priority , "lane_change")
+        self.assertEqual(self.planner.control_priority , "lane change")
         self.assertEqual(self.planner.lane_change.direction , "L")
-        self.assertFalse(self.planner.lane_change.should_exit)
+        self.assertFalse(self.planner.lane_change.exiting)
         self.assertEqual(self.planner.lane_change_available , {"L": False , "R": False})
 
     def test_planned_path_is_accepted_by_steering_with_correct_direction(self):
